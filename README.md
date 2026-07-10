@@ -18,7 +18,7 @@ vp install      # or: pnpm install
 vp dev          # http://localhost:5173
 vp build        # production build → dist/
 vp check        # format + lint + typecheck
-pnpm test       # 36 geometry/layout/schema tests (never a globally-installed vp)
+pnpm test       # 29 geometry/layout/schema tests (never a globally-installed vp)
 ```
 
 ## The design
