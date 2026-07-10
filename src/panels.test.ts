@@ -1,7 +1,7 @@
 // Geometry tests for the eight sliding-lid panels: comb complementarity, kerf press-fit growth,
 // outline sanity, groove shape, assembled placement, and the lid. Pure Node — no DOM, no WASM.
 
-import { bbox } from "parametric-kit/testkit";
+import { bbox, pointInPolygon as inPoly, signedArea } from "parametric-kit/testkit";
 import { BufferAttribute, BufferGeometry } from "three";
 import { describe, expect, test } from "vite-plus/test";
 import {
@@ -35,26 +35,6 @@ function panel(id: string, p: Params = defaults): Panel {
   const found = panels(p).find((pa) => pa.id === id);
   if (!found) throw new Error(`no panel ${id}`);
   return found;
-}
-
-function signedArea(outline: Pt[]): number {
-  let a = 0;
-  for (let i = 0; i < outline.length; i++) {
-    const [x1, y1] = outline[i]!;
-    const [x2, y2] = outline[(i + 1) % outline.length]!;
-    a += x1 * y2 - x2 * y1;
-  }
-  return a / 2;
-}
-
-function inPoly(outline: Pt[], x: number, y: number): boolean {
-  let inside = false;
-  for (let i = 0, j = outline.length - 1; i < outline.length; j = i++) {
-    const [xi, yi] = outline[i]!;
-    const [xj, yj] = outline[j]!;
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
 }
 
 describe("comb math", () => {
