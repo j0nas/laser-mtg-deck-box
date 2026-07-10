@@ -1,6 +1,8 @@
-// Parameters for the laser-cut MTG deck box: a finger-jointed open-top BODY holding a vertical stack
-// of sleeved cards (width along X, stack along Y, height up Z), and a finger-jointed telescoping CAP
-// (open-bottom box) that slides down over it. Ten flat panels, cut from sheet stock. All millimetres.
+// Parameters for the laser-cut MTG deck box: a finger-jointed open-top box holding a vertical stack
+// of sleeved cards (width along X, stack along Y, height up Z), closed by a LID that SLIDES
+// front-to-back in hidden grooves. The grooves come from laminated side walls — each side is an
+// inner layer carrying the groove profile glued to a full outer layer — so the box reads as clean
+// solid walls with a sunken sliding top. Eight flat panels, cut from sheet stock. All millimetres.
 // Pure / framework-free so panel geometry, SVG export and the viewer share one source of truth.
 
 import {
@@ -81,40 +83,22 @@ export const schema = defineParams({
     label: "Finger width",
   }),
 
-  capFit: num({
-    def: 0.2,
-    min: 0.05,
-    max: 0.6,
+  lidFit: num({
+    def: 0.3,
+    min: 0.1,
+    max: 0.8,
     step: 0.05,
     group: "fit",
-    label: "Cap fit clearance",
+    label: "Lid slide clearance",
   }),
-  capDepth: num({ def: 30, min: 15, max: 60, step: 1, group: "fit", label: "Cap depth" }),
 
-  notchWidth: num({
-    def: 20,
+  lidPull: num({
+    def: 12,
     min: 0,
-    max: 40,
-    step: 1,
-    group: "retrieval",
-    label: "Notch width (0 = off)",
-  }),
-  notchDepth: num({
-    def: 10,
-    min: 4,
     max: 20,
-    step: 0.5,
-    group: "retrieval",
-    label: "Notch depth",
-    maxKey: "capDepth", // the cap always slides down capDepth, so the notch must stay inside it
-  }),
-  sideRecessWidth: num({
-    def: 0,
-    min: 0,
-    max: 30,
     step: 1,
     group: "retrieval",
-    label: "Side recess width (0 = off)",
+    label: "Lid pull hole Ø (0 = off)",
   }),
 
   sheetW: num({ def: 300, min: 100, max: 1000, step: 10, group: "sheet", label: "Sheet width" }),
@@ -133,71 +117,60 @@ export function capacity(p: Params): number {
 
 export type Dims = {
   stackD: number; // depth of the card stack itself
-  innerW: number; // body cavity width / depth / height
+  innerW: number; // cavity width / depth / height
   innerD: number;
   innerH: number;
-  bodyOuterW: number; // body footprint (outside the walls)
-  bodyOuterD: number;
-  bodyH: number; // body height: floor to open top rim
-  capInnerW: number; // cap socket (what slides down over the body's outside)
-  capInnerD: number;
-  capOuterW: number; // cap footprint (outside its own walls)
-  capOuterD: number;
-  capH: number; // cap height: open bottom edge to its top face
-  assembledH: number; // closed-box height, body sitting on the bench with the cap seated
+  outerW: number; // outer footprint — the sides are TWO layers thick (groove lamination)
+  outerD: number;
+  slotZ: number; // groove floor: the lid's underside when closed
+  slotH: number; // groove height: one thickness + the slide clearance
+  railStrip: number; // material left above the groove (glued full-length to the outer layer)
+  wallH: number; // full wall height = closed-box height
+  lidW: number; // lid rides one inner-layer deep in each groove, minus the slide clearance
+  lidL: number; // front face flush to the back wall's inner face
+  assembledH: number; // = wallH: the lid is sunken, nothing sticks up
 };
 
 // Derived panel dimensions, shared by the panel-geometry builder, SVG export and the tests.
 //
-// The body is an open-top box: its cavity wraps the card stack (+ token headroom + stack clearance
-// along the stack axis, + side clearance across the width, + headroom above the card tops), and its
-// walls add one material thickness on every side, with the floor adding one more thickness at the
-// bottom. Cards never poke out the top because innerH === cardHeight + headroom by construction
-// (headroom >= 0), so the cavity is always at least as tall as a card.
+// The cavity wraps the card stack (+ token headroom + stack clearance along the stack axis, + side
+// clearance across the width, + headroom above the card tops). The front and back walls add one
+// thickness each; the SIDES add two (inner groove layer + outer layer). Cards never poke above the
+// groove floor because slotZ - floor = innerH = cardHeight + headroom (headroom >= 0), so the
+// closing lid always clears them.
 //
-// The cap is an open-bottom telescoping box that slides down over the OUTSIDE of the body: its socket
-// clears the body's outer footprint by capFit per side, and its own walls add one more thickness
-// outside that. Because the cap's skirt overlaps the body over capDepth of the body's own height, the
-// assembled height is just the body height plus the cap's top thickness (the overlapped portion of
-// the cap is not extra height) — equivalently bodyH + (capH - capDepth), since capH = capDepth +
-// thickness.
+// Vertical stack-up: floor thickness, cavity, then the groove (one thickness + lidFit of slack for
+// the sliding lid) and a rail strip above it. The strip can be modest — max(1.5·t, 5 mm) — because
+// lamination glues it to the outer layer along its whole length; it is not a free-hanging bridge.
 export function dims(p: Params): Dims {
+  const t = p.thickness;
   const stackD = p.cardCount * p.cardThickness;
   const innerW = p.cardWidth + 2 * p.sideClearance;
   const innerD = stackD + p.extraCards * p.cardThickness + p.stackClearance;
   const innerH = p.cardHeight + p.headroom;
-  const bodyOuterW = innerW + 2 * p.thickness;
-  const bodyOuterD = innerD + 2 * p.thickness;
-  const bodyH = p.thickness + innerH; // floor thickness + cavity height
-  const capInnerW = bodyOuterW + 2 * p.capFit;
-  const capInnerD = bodyOuterD + 2 * p.capFit;
-  const capOuterW = capInnerW + 2 * p.thickness;
-  const capOuterD = capInnerD + 2 * p.thickness;
-  const capH = p.capDepth + p.thickness; // skirt depth + top thickness
-  const assembledH = bodyH + p.thickness;
+  const outerW = innerW + 4 * t;
+  const outerD = innerD + 2 * t;
+  const slotZ = t + innerH;
+  const slotH = t + p.lidFit;
+  const railStrip = Math.max(1.5 * t, 5);
+  const wallH = slotZ + slotH + railStrip;
+  const lidW = innerW + 2 * t - p.lidFit;
+  const lidL = innerD + t;
   return {
     stackD,
     innerW,
     innerD,
     innerH,
-    bodyOuterW,
-    bodyOuterD,
-    bodyH,
-    capInnerW,
-    capInnerD,
-    capOuterW,
-    capOuterD,
-    capH,
-    assembledH,
+    outerW,
+    outerD,
+    slotZ,
+    slotH,
+    railStrip,
+    wallH,
+    lidW,
+    lidL,
+    assembledH: wallH,
   };
-}
-
-// The notch's real depth, capped at capDepth so the closed cap always hides it — mirrors the
-// schema's maxKey ceiling (see notchDepth above), but stays correct even for a params blob that
-// bypassed the slider clamp (e.g. hand-built in a test, or restored from an older schema version
-// before clampCeilings ran).
-export function effectiveNotchDepth(p: Params): number {
-  return Math.min(p.notchDepth, p.capDepth);
 }
 
 // One-click deck sizes. Picking one sets only the card count. Counts match

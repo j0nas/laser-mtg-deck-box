@@ -5,7 +5,7 @@
 import { downloadText } from "parametric-kit/export";
 import { createStore, renderPanel } from "parametric-kit/params";
 import { createViewer, installAppHook } from "parametric-kit/viewer";
-import { Group, Matrix4, Mesh, MeshStandardMaterial, ExtrudeGeometry, Shape } from "three";
+import { ExtrudeGeometry, Group, Matrix4, Mesh, MeshStandardMaterial, Path, Shape } from "three";
 import { type Panel, panels, placeMatrix } from "./panels.ts";
 import {
   capacity,
@@ -19,12 +19,12 @@ import {
 } from "./params.ts";
 import { filenameStem, layout, sheetSvg, totalPanelArea } from "./svg.ts";
 
-const store = createStore(schema, { key: "laser-mtg-deck-box:params", version: 1 });
+const store = createStore(schema, { key: "laser-mtg-deck-box:params", version: 2 });
 const params: Params = store.load();
 
 const viewer = createViewer(document.getElementById("app")!);
 
-type ViewMode = "assembled" | "open" | "flat";
+type ViewMode = "closed" | "open" | "flat";
 const viewSelect = document.getElementById("viewMode") as HTMLSelectElement;
 const viewMode = (): ViewMode => viewSelect.value as ViewMode;
 
@@ -42,6 +42,12 @@ function panelMesh(panel: Panel, matrix: Matrix4, color: number): Mesh {
   const shape = new Shape();
   panel.outline.forEach(([x, y], i) => (i === 0 ? shape.moveTo(x, y) : shape.lineTo(x, y)));
   shape.closePath();
+  for (const hole of panel.holes) {
+    const path = new Path();
+    hole.forEach(([x, y], i) => (i === 0 ? path.moveTo(x, y) : path.lineTo(x, y)));
+    path.closePath();
+    shape.holes.push(path);
+  }
   const geo = new ExtrudeGeometry(shape, { depth: params.thickness, bevelEnabled: false });
   const mesh = new Mesh(geo, new MeshStandardMaterial({ color, roughness: 0.85, metalness: 0 }));
   mesh.matrixAutoUpdate = false;
@@ -70,18 +76,19 @@ function rebuild(): void {
     for (const sheet of l.sheets) {
       for (const { panel, x, y } of sheet.placements) {
         const m = new Matrix4().makeTranslation(ox + x, params.sheetH - y - panel.size[1], 0);
-        modelGroup.add(panelMesh(panel, m, panel.id.startsWith("cap-") ? capTint : base));
+        modelGroup.add(panelMesh(panel, m, panel.id === "lid" ? capTint : base));
       }
       ox += params.sheetW + 25;
     }
   } else {
-    const lift = viewMode() === "open" ? dims(params).capH + 45 : 0;
+    // "open" slides the lid most of the way out of its grooves, toward the viewer.
+    const slide = viewMode() === "open" ? -0.72 * dims(params).lidL : 0;
     for (const panel of panels(params)) {
       const m = new Matrix4().fromArray(placeMatrix(panel.place));
-      if (lift > 0 && panel.id.startsWith("cap-")) {
-        m.premultiply(new Matrix4().makeTranslation(0, 0, lift));
+      if (slide !== 0 && panel.id === "lid") {
+        m.premultiply(new Matrix4().makeTranslation(0, slide, 0));
       }
-      modelGroup.add(panelMesh(panel, m, panel.id.startsWith("cap-") ? capTint : base));
+      modelGroup.add(panelMesh(panel, m, panel.id === "lid" ? capTint : base));
     }
   }
   viewer.invalidate();
@@ -96,7 +103,7 @@ function updateReadout(): void {
   const grams = Math.round(((totalPanelArea(params) * params.thickness) / 1000) * mat.density);
   const l = layout(params);
   dimsEl.innerHTML = [
-    `Closed box: <b>${d.capOuterW.toFixed(1)} × ${d.capOuterD.toFixed(1)} × ${d.assembledH.toFixed(1)} mm</b>`,
+    `Closed box: <b>${d.outerW.toFixed(1)} × ${d.outerD.toFixed(1)} × ${d.assembledH.toFixed(1)} mm</b>`,
     `Fits <b>${capacity(params)}</b> cards (deck ${params.cardCount} + ${params.extraCards} spare)`,
     `${mat.name} · ~${grams} g · <b>${l.sheets.length}</b> sheet${l.sheets.length === 1 ? "" : "s"} of ${params.sheetW}×${params.sheetH}`,
   ].join("<br>");
@@ -125,11 +132,15 @@ const panel = renderPanel(document.getElementById("controls")!, schema, params, 
         `Cut from ${materialFor(p.thickness).name}. Kerf grows every finger into a press-fit; ` +
         `fingers aim for ${p.fingerWidth} mm.`,
     },
-    { id: "fit", title: "Cap fit", hint: "The cap telescopes over the body; clearance per side." },
+    {
+      id: "fit",
+      title: "Lid fit",
+      hint: "The lid slides in hidden grooves inside the laminated side walls; this clearance plus the kerf sets the glide.",
+    },
     {
       id: "retrieval",
       title: "Retrieval",
-      hint: "Thumb notch on the front and side recesses — both stay hidden under the closed cap.",
+      hint: "A finger in the pull hole slides the lid open; the hole doubles as a peek at the top card.",
     },
     { id: "sheet", title: "Sheet" },
   ],

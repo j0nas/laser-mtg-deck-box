@@ -165,7 +165,7 @@
     <div id="app"></div>
     <div id="panel">
       <h1>MTG deck box — laser cut</h1>
-      <p class="sub">Finger-jointed two-part box · body + telescoping cap · SVG cut files</p>
+      <p class="sub">Finger-jointed box · sliding lid in hidden grooves · SVG cut files</p>
 
       <div id="controls"></div>
 
@@ -174,8 +174,8 @@
         <label class="sel"
           >Preview
           <select id="viewMode">
-            <option value="assembled">Assembled (closed)</option>
-            <option value="open" selected>Cap lifted</option>
+            <option value="closed">Closed</option>
+            <option value="open" selected>Lid open</option>
             <option value="flat">Flat on the sheet</option>
           </select>
         </label>
@@ -187,9 +187,10 @@
       <button id="downloadSvg">⬇ Download cut files (SVG)</button>
       <div class="hint">
         Drag to orbit · scroll to zoom · right-drag to pan. The SVGs are real-millimetre cut files
-        (hairline red strokes), one file per sheet, kerf-compensated for a press-fit — glue is
-        optional. The preview and the cut paths come from the same outlines, so the box matches what
-        you see.
+        (hairline red strokes), one file per sheet, kerf-compensated so the joints press-fit. Glue
+        each inner side layer to its outer layer (the lamination hides the lid grooves), assemble,
+        and the lid slides dry — never glue it. The preview and the cut paths come from the same
+        outlines, so the box matches what you see.
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

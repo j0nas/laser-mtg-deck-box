@@ -3,7 +3,7 @@
 // the download itself goes through parametric-kit/export in main.ts.
 
 import { type Panel, panels, type Pt } from "./panels.ts";
-import { dims, type Params } from "./params.ts";
+import type { Params } from "./params.ts";
 
 export type Placement = { panel: Panel; x: number; y: number };
 export type Sheet = { placements: Placement[] };
@@ -116,9 +116,4 @@ export function totalPanelArea(p: Params): number {
 // Sanity data for the readout: does the tallest/widest part even fit the configured sheet?
 export function sheetFits(p: Params): boolean {
   return layout(p).oversize.length === 0;
-}
-
-export function assembledSummary(p: Params): { w: number; d: number; h: number } {
-  const dm = dims(p);
-  return { w: dm.capOuterW, d: dm.capOuterD, h: dm.assembledH };
 }
