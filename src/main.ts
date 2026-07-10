@@ -38,6 +38,21 @@ const TINTS: Record<string, number> = {
 const modelGroup = new Group();
 viewer.scene.add(modelGroup);
 
+const explodeEl = document.getElementById("explode") as HTMLInputElement;
+
+// Per-panel explode directions: the floor drops, the lid rises, walls move off their faces — and
+// the two layers of each side separate, showing the groove lamination that is otherwise hidden.
+const EXPLODE_DIR: Record<string, [number, number, number]> = {
+  "body-floor": [0, 0, -1],
+  lid: [0, 0, 1],
+  "body-front": [0, -1, 0],
+  "body-back": [0, 1, 0],
+  "side-left-outer": [-1.7, 0, 0],
+  "side-left-inner": [-0.85, 0, 0],
+  "side-right-inner": [0.85, 0, 0],
+  "side-right-outer": [1.7, 0, 0],
+};
+
 function panelMesh(panel: Panel, matrix: Matrix4, color: number): Mesh {
   const shape = new Shape();
   panel.outline.forEach(([x, y], i) => (i === 0 ? shape.moveTo(x, y) : shape.lineTo(x, y)));
@@ -82,11 +97,17 @@ function rebuild(): void {
     }
   } else {
     // "open" slides the lid most of the way out of its grooves, toward the viewer.
-    const slide = viewMode() === "open" ? -0.72 * dims(params).lidL : 0;
+    const d = dims(params);
+    const slide = viewMode() === "open" ? -0.72 * d.lidL : 0;
+    const explode = Number(explodeEl.value) * 0.45 * Math.max(d.outerW, d.outerD, d.wallH);
     for (const panel of panels(params)) {
       const m = new Matrix4().fromArray(placeMatrix(panel.place));
-      if (slide !== 0 && panel.id === "lid") {
-        m.premultiply(new Matrix4().makeTranslation(0, slide, 0));
+      const [ex, ey, ez] = EXPLODE_DIR[panel.id] ?? [0, 0, 0];
+      const slideY = panel.id === "lid" ? slide : 0;
+      if (slideY !== 0 || explode > 0) {
+        m.premultiply(
+          new Matrix4().makeTranslation(ex * explode, ey * explode + slideY, ez * explode),
+        );
       }
       modelGroup.add(panelMesh(panel, m, panel.id === "lid" ? capTint : base));
     }
@@ -156,6 +177,8 @@ viewSelect.addEventListener("change", () => {
   rebuild();
   viewer.frameCamera([modelGroup]);
 });
+
+explodeEl.addEventListener("input", rebuild); // view state only: no persist, no readout change
 
 document.getElementById("reset")!.addEventListener("click", () => {
   Object.assign(params, store.defaults);
