@@ -28,11 +28,13 @@ type ViewMode = "closed" | "open" | "flat";
 const viewSelect = document.getElementById("viewMode") as HTMLSelectElement;
 const viewMode = (): ViewMode => viewSelect.value as ViewMode;
 
-// Preview tint per sheet material; the cap gets a slightly darker shade so the two parts read.
-const TINTS: Record<string, number> = {
-  "1/8″ basswood ply": 0xdcbd8e,
-  "3mm MDF": 0xb59a7a,
-  "1/8″ acrylic": 0xa9c8e0,
+// Preview tints per sheet material: `face` is the sheet surface, `edge` the laser-cut end grain
+// (charred a shade darker in real life) — ExtrudeGeometry splits caps vs walls into material
+// groups, so every finger, tab and groove mouth outlines itself exactly like the physical box.
+const TINTS: Record<string, { face: number; edge: number }> = {
+  "1/8″ basswood ply": { face: 0xdcbd8e, edge: 0xa57d4f },
+  "3mm MDF": { face: 0xb59a7a, edge: 0x74604c },
+  "1/8″ acrylic": { face: 0xa9c8e0, edge: 0x7fa3bf },
 };
 
 const modelGroup = new Group();
@@ -53,7 +55,7 @@ const EXPLODE_DIR: Record<string, [number, number, number]> = {
   "side-right-outer": [1.7, 0, 0],
 };
 
-function panelMesh(panel: Panel, matrix: Matrix4, color: number): Mesh {
+function panelMesh(panel: Panel, matrix: Matrix4, face: number, edge: number): Mesh {
   const shape = new Shape();
   panel.outline.forEach(([x, y], i) => (i === 0 ? shape.moveTo(x, y) : shape.lineTo(x, y)));
   shape.closePath();
@@ -64,7 +66,11 @@ function panelMesh(panel: Panel, matrix: Matrix4, color: number): Mesh {
     shape.holes.push(path);
   }
   const geo = new ExtrudeGeometry(shape, { depth: params.thickness, bevelEnabled: false });
-  const mesh = new Mesh(geo, new MeshStandardMaterial({ color, roughness: 0.85, metalness: 0 }));
+  // Material group 0 = the two sheet faces, group 1 = the cut walls (end grain).
+  const mesh = new Mesh(geo, [
+    new MeshStandardMaterial({ color: face, roughness: 0.85, metalness: 0 }),
+    new MeshStandardMaterial({ color: edge, roughness: 0.9, metalness: 0 }),
+  ]);
   mesh.matrixAutoUpdate = false;
   mesh.matrix.copy(matrix);
   mesh.castShadow = true;
@@ -78,12 +84,12 @@ function rebuild(): void {
   for (const child of old) {
     if (child instanceof Mesh) {
       child.geometry.dispose();
-      (child.material as MeshStandardMaterial).dispose();
+      for (const m of child.material as MeshStandardMaterial[]) m.dispose();
     }
   }
 
-  const base = TINTS[materialFor(params.thickness).name] ?? TINTS["1/8″ basswood ply"]!;
-  const capTint = base - 0x181818; // all tints keep every channel above 0x18, so this never wraps
+  const tint = TINTS[materialFor(params.thickness).name] ?? TINTS["1/8″ basswood ply"]!;
+  const lidFace = tint.face - 0x181818; // all tints keep every channel above 0x18, so this never wraps
 
   if (viewMode() === "flat") {
     const l = layout(params);
@@ -91,7 +97,7 @@ function rebuild(): void {
     for (const sheet of l.sheets) {
       for (const { panel, x, y } of sheet.placements) {
         const m = new Matrix4().makeTranslation(ox + x, params.sheetH - y - panel.size[1], 0);
-        modelGroup.add(panelMesh(panel, m, panel.id === "lid" ? capTint : base));
+        modelGroup.add(panelMesh(panel, m, panel.id === "lid" ? lidFace : tint.face, tint.edge));
       }
       ox += params.sheetW + 25;
     }
@@ -109,7 +115,7 @@ function rebuild(): void {
           new Matrix4().makeTranslation(ex * explode, ey * explode + slideY, ez * explode),
         );
       }
-      modelGroup.add(panelMesh(panel, m, panel.id === "lid" ? capTint : base));
+      modelGroup.add(panelMesh(panel, m, panel.id === "lid" ? lidFace : tint.face, tint.edge));
     }
   }
   viewer.invalidate();
@@ -156,7 +162,7 @@ const panel = renderPanel(document.getElementById("controls")!, schema, params, 
     {
       id: "fit",
       title: "Lid fit",
-      hint: "The lid slides in hidden grooves inside the laminated side walls; this clearance plus the kerf sets the glide.",
+      hint: "The lid slides in hidden grooves; clearance plus kerf sets the glide. The latch is a spring cut into each groove that clicks into the lid's edge — raise the bump for a harder click.",
     },
     {
       id: "retrieval",

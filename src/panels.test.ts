@@ -8,6 +8,8 @@ import {
   applyPlace,
   combIntervals,
   fingerCount,
+  LATCH,
+  latchSpec,
   type Panel,
   panels,
   placeMatrix,
@@ -163,9 +165,14 @@ describe("outlines", () => {
     expect(inPoly(side.outline, t + tabD, t / 2)).toBe(false);
   });
 
-  test("lid: plain rectangle with a pull hole when enabled", () => {
+  test("lid: rectangle with latch notches and a pull hole; both disappear when disabled", () => {
     const lid = panel("lid");
-    expect(lid.outline.length).toBe(4);
+    const latch = latchSpec(defaults)!;
+    expect(lid.outline.length).toBe(12); // 4 corners + two edge notches
+    // Notch void at the nub's closed position, material just beyond it.
+    expect(inPoly(lid.outline, d.lidW - t / 2, latch.uNub)).toBe(false);
+    expect(inPoly(lid.outline, t / 2, latch.uNub)).toBe(false);
+    expect(inPoly(lid.outline, d.lidW - t / 2, latch.uNub + LATCH.nubL)).toBe(true);
     expect(lid.holes.length).toBe(1);
     const hole = lid.holes[0]!;
     for (const [x, y] of hole) {
@@ -174,7 +181,32 @@ describe("outlines", () => {
       expect(y).toBeGreaterThan(0);
       expect(y).toBeLessThan(d.lidL);
     }
-    expect(panel("lid", { ...defaults, lidPull: 0 }).holes.length).toBe(0);
+    const bare = panel("lid", { ...defaults, lidPull: 0, latchBump: 0 });
+    expect(bare.outline.length).toBe(4);
+    expect(bare.holes.length).toBe(0);
+  });
+
+  test("latch: spring tongue with nub in the inner layers, gone when off or when the box is tiny", () => {
+    const p0 = { ...defaults, kerf: 0 };
+    const inner = panel("side-left-inner", p0);
+    const latch = latchSpec(p0)!;
+    // Nub material rises into the groove; the groove void continues above it.
+    expect(inPoly(inner.outline, latch.uNub, d.slotZ + latch.bump / 2)).toBe(true);
+    expect(inPoly(inner.outline, latch.uNub, d.slotZ + latch.bump + 0.2)).toBe(false);
+    // Tongue material above the U-slot void; anchored into solid wall behind.
+    const midTongue = latch.uA + LATCH.tongueL / 2;
+    expect(inPoly(inner.outline, midTongue, d.slotZ - LATCH.tongueW / 2)).toBe(true);
+    expect(inPoly(inner.outline, midTongue, d.slotZ - LATCH.tongueW - LATCH.slotW / 2)).toBe(false);
+    expect(inPoly(inner.outline, latch.uA + LATCH.tongueL + 3, d.slotZ - LATCH.tongueW / 2)).toBe(
+      true,
+    );
+    // Off -> straight groove floor.
+    const off = panel("side-left-inner", { ...p0, latchBump: 0 });
+    expect(inPoly(off.outline, latch.uNub, d.slotZ + 0.15)).toBe(false);
+    // A tiny box has no room for the spring: latch quietly disappears.
+    const tiny = { ...defaults, cardCount: 10, extraCards: 0, cardThickness: 0.305 };
+    expect(latchSpec(tiny)).toBeNull();
+    expect(panels(tiny).find((pa) => pa.id === "lid")!.outline.length).toBe(4);
   });
 });
 

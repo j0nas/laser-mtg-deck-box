@@ -36,7 +36,10 @@ pnpm test       # 29 geometry/layout/schema tests (never a globally-installed vp
   press-fit while panel envelopes stay exactly nominal. Kerf 0 warns (joints would cut loose).
 - **Lid** — slides front-to-back, stops against the back wall, rests flush on the front wall's
   top edge; a pull hole opens it one-handed. Slide clearance (`lidFit`) plus the laser's natural
-  kerf set the glide — the lid is the one part you never glue.
+  kerf set the glide — the lid is the one part you never glue. A **flex latch** clicks it shut:
+  each groove hides a cantilever spring (a U-slot cut in the inner layer) whose nub pops into a
+  notch in the lid's edge; `latchBump` tunes the click, 0 removes it, and tiny boxes drop it
+  automatically.
 - **Sheet** — shelf-packed layout with a part gap, multi-sheet when needed, oversize panels
   reported instead of silently dropped. One SVG per sheet, hairline red strokes, `id` per panel.
 

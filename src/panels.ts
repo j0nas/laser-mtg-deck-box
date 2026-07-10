@@ -153,6 +153,34 @@ function dedupe(pts: Pt[]): Pt[] {
   return out;
 }
 
+// --- lid flex latch --------------------------------------------------------------------------
+//
+// A cantilever spring cut into each inner side layer, just below the groove floor: a U-slot frees a
+// tongue (anchored at the back) whose half-ellipse nub rises `latchBump` into the groove. The lid
+// depresses it while sliding and it pops into a notch in the lid's side edge at the closed
+// position — a hardware-free click, tuned by the bump height. All through-cuts, so the two inner
+// layers stay identical parts.
+export const LATCH = {
+  freeEnd: 6, // tongue's free end, measured from the front face
+  tongueL: 24,
+  tongueW: 4,
+  slotW: 1.5, // clearance under the tongue; comfortably exceeds the max bump deflection
+  nubL: 8,
+  notchSlack: 0.5, // lid notch is this much longer than the nub for a crisp seat
+};
+
+export type Latch = { uA: number; uNub: number; bump: number };
+
+// Null when the latch is off or the box is too small to host the spring and the notch.
+export function latchSpec(p: Params): Latch | null {
+  if (p.latchBump <= 0) return null;
+  const d = dims(p);
+  const reach = d.outerD - p.thickness;
+  if (reach < LATCH.freeEnd + LATCH.tongueL + 8) return null;
+  if (d.lidL < LATCH.freeEnd + LATCH.nubL + 6) return null;
+  return { uA: LATCH.freeEnd, uNub: LATCH.freeEnd + 2 + LATCH.nubL / 2, bump: p.latchBump };
+}
+
 type EdgeComb = {
   len: number; // comb runs from v=0 to len; above it the edge is plain at the blank's face
   firstIsA: boolean;
@@ -168,7 +196,7 @@ type WallSpec = {
   left: EdgeComb;
   right: EdgeComb;
   notchSpan: number; // floor-tab comb region, centered; 0 = no bottom notches
-  slot?: { z: number; h: number; reach: number } | undefined; // front-open groove (inner side layers)
+  slot?: { z: number; h: number; reach: number; latch?: Latch | null } | undefined; // front-open groove (inner side layers)
 };
 
 // Walk a wall outline CCW: bottom edge (with floor-tab notches), right comb up, plain rise to the
@@ -210,6 +238,25 @@ function wallOutline(s: WallSpec): Pt[] {
         [s.slot.reach, s.slot.z + s.slot.h],
         [s.slot.reach, s.slot.z],
       );
+      if (s.slot.latch) {
+        // Walking the groove floor back-to-front: nub, free-end face, tongue underside back to the
+        // anchor, then around the U-slot and up to rejoin the floor.
+        const { uA, uNub, bump } = s.slot.latch;
+        const z = s.slot.z;
+        for (let i = 0; i <= 12; i++) {
+          const th = (Math.PI * i) / 12;
+          pts.push([uNub + (LATCH.nubL / 2) * Math.cos(th), z + bump * Math.sin(th)]);
+        }
+        const vT = z - LATCH.tongueW;
+        pts.push(
+          [uA, z],
+          [uA, vT],
+          [uA + LATCH.tongueL, vT],
+          [uA + LATCH.tongueL, vT - LATCH.slotW],
+          [uA - LATCH.slotW, vT - LATCH.slotW],
+          [uA - LATCH.slotW, z],
+        );
+      }
     } else {
       pts.push([0, s.left.len]);
     }
@@ -267,6 +314,36 @@ function floorOutline(
   return dedupe(pts);
 }
 
+// The lid: a plain rectangle, plus a notch in each side edge that the latch nub pops into. The
+// notch sits at the nub's closed position and is one wall-thickness deep — deeper than the nub
+// column needs, so kerf and lidFit slack never keep the nub from seating.
+function lidOutline(lidW: number, lidL: number, t: number, latch: Latch | null): Pt[] {
+  if (!latch) {
+    return [
+      [0, 0],
+      [lidW, 0],
+      [lidW, lidL],
+      [0, lidL],
+    ];
+  }
+  const v0 = latch.uNub - (LATCH.nubL + LATCH.notchSlack) / 2;
+  const v1 = latch.uNub + (LATCH.nubL + LATCH.notchSlack) / 2;
+  return [
+    [0, 0],
+    [lidW, 0],
+    [lidW, v0],
+    [lidW - t, v0],
+    [lidW - t, v1],
+    [lidW, v1],
+    [lidW, lidL],
+    [0, lidL],
+    [0, v1],
+    [t, v1],
+    [t, v0],
+    [0, v0],
+  ];
+}
+
 const HOLE_SEGS = 24;
 
 function circleCW(cx: number, cy: number, r: number): Pt[] {
@@ -286,6 +363,7 @@ export function panels(p: Params): Panel[] {
   const d = dims(p);
   const t = p.thickness;
   const { kerf, fingerWidth } = p;
+  const latch = latchSpec(p);
 
   // Both layers of a side are the same part; the combs differ per edge, not per layer.
   const sideLayer = (id: string, x: number, grooved: boolean): Panel => ({
@@ -299,7 +377,7 @@ export function panels(p: Params): Panel[] {
       left: { len: d.slotZ, firstIsA: false, depth: t }, // front corner: comb only up to the front wall's top
       right: { len: d.wallH, firstIsA: false, depth: t }, // back corner: full height
       notchSpan: d.innerD,
-      slot: grooved ? { z: d.slotZ, h: d.slotH, reach: d.outerD - t } : undefined,
+      slot: grooved ? { z: d.slotZ, h: d.slotH, reach: d.outerD - t, latch } : undefined,
     }),
     holes: [],
     size: [d.outerD, d.wallH],
@@ -343,12 +421,7 @@ export function panels(p: Params): Panel[] {
     },
     {
       id: "lid",
-      outline: [
-        [0, 0],
-        [d.lidW, 0],
-        [d.lidW, d.lidL],
-        [0, d.lidL],
-      ],
+      outline: lidOutline(d.lidW, d.lidL, t, latch),
       holes: lidHoles,
       size: [d.lidW, d.lidL],
       place: { pos: [(d.outerW - d.lidW) / 2, 0, d.slotZ], rot: [0, 0, 0] },

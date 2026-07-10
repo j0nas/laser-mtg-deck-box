@@ -91,6 +91,14 @@ export const schema = defineParams({
     group: "fit",
     label: "Lid slide clearance",
   }),
+  latchBump: num({
+    def: 0.35,
+    min: 0,
+    max: 0.8,
+    step: 0.05,
+    group: "fit",
+    label: "Latch click (0 = off)",
+  }),
 
   lidPull: num({
     def: 12,
