@@ -216,6 +216,12 @@ importers:
 
   .:
     dependencies:
+      clipper-lib:
+        specifier: ^6.4.2
+        version: 6.4.2
+      opentype.js:
+        specifier: 1.3.4
+        version: 1.3.4
       parametric-kit:
         specifier: link:../parametric-kit
         version: link:../parametric-kit
@@ -223,6 +229,12 @@ importers:
         specifier: ^0.184.0
         version: 0.184.0
     devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@types/opentype.js':
+        specifier: ^1.3.8
+        version: 1.3.10
       '@types/three':
         specifier: ^0.184.1
         version: 0.184.1
@@ -231,10 +243,10 @@ importers:
         version: 6.0.3
       vite:
         specifier: npm:@voidzero-dev/vite-plus-core@latest
-        version: '@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3)'
+        version: '@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3)'
       vite-plus:
         specifier: 'catalog:'
-        version: 0.2.4(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(typescript@6.0.3)
+        version: 0.2.4(@types/node@24.13.3)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(typescript@6.0.3)
 
 packages:
 
@@ -575,6 +587,12 @@ packages:
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
+  '@types/node@24.13.3':
+    resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
+
+  '@types/opentype.js@1.3.10':
+    resolution: {integrity: sha512-F67EFyk6j02okHz5JCgata3ZRAcZi9GLnzmkHw/rzJq3OCc8/ZVdoKrxMTYjcQP6IYHGBz2cav1cpzkOkPiPCQ==}
+
   '@types/stats.js@0.17.4':
     resolution: {integrity: sha512-jIBvWWShCvlBqBNIZt0KAshWpvSjhkwkEu4ZUcASoAvhmrgAUI2t1dXrjSL4xXVLB4FznPrIsX3nKXFl/Dt4vA==}
 
@@ -751,6 +769,9 @@ packages:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
 
+  clipper-lib@6.4.2:
+    resolution: {integrity: sha512-knglhjQX5ihNj/XCIs6zCHrTemdvHY3LPZP9XB2nq2/3igyYMFueFXtfp84baJvEE+f8pO1ZS4UVeEgmLnAprQ==}
+
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
@@ -892,6 +913,11 @@ packages:
     resolution: {integrity: sha512-9miFgM2OFba7hB+pRgvtV84pYTBaoTHohvmIgiRt6dRIzbwEOIaNaP+dIlGs2fNFoB0SeISs0Jz5WFVRid6Xyg==}
     engines: {node: '>=12.20.0'}
 
+  opentype.js@1.3.4:
+    resolution: {integrity: sha512-d2JE9RP/6uagpQAVtJoF0pJJA/fgai89Cc50Yp0EJHk+eLp6QQ7gBoblsnubRULNY132I0J1QKMJ+JTbMqz4sw==}
+    engines: {node: '>= 8.0.0'}
+    hasBin: true
+
   oxfmt@0.57.0:
     resolution: {integrity: sha512-ZB7Bi+rGDSqmVIo9jwcLyFgjxXvQhDdU+jx+ZrVy6VRiVXK2+CHc4hO3J4dUQjHe7V0ymHB+MDuv5z+NhK07HA==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -964,8 +990,14 @@ packages:
   std-env@4.2.0:
     resolution: {integrity: sha512-oCUKSupKTHX53EyjDtuZQ64pjLJ6yYCtpmEw0goYxtjG9KpbRe8KAsl2tBUGU9DyMcJ0RwJ8GqJAFzMXcXW1Rw==}
 
+  string.prototype.codepointat@0.2.1:
+    resolution: {integrity: sha512-2cBVCj6I4IOvEnjgO/hWqXjqBGsY+zwPmHl12Srk9IXSZ56Jwwmy+66XO5Iut/oQVR7t5ihYdLB0GMa4alEUcg==}
+
   three@0.184.0:
     resolution: {integrity: sha512-wtTRjG92pM5eUg/KuUnHsqSAlPM296brTOcLgMRqEeylYTh/CdtvKUvCyyCQTzFuStieWxvZb8mVTMvdPyUpxg==}
+
+  tiny-inflate@1.0.3:
+    resolution: {integrity: sha512-pkY1fj1cKHb2seWDy0B16HeWyczlJA9/WW3u3c4z/NiWDsO3DOU5D7nhTLE9CF0yXv/QZFY7sEJmj24dK+Rrqw==}
 
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
@@ -994,6 +1026,9 @@ packages:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
     hasBin: true
+
+  undici-types@7.18.2:
+    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
   vite-plus@0.2.4:
     resolution: {integrity: sha512-gaBBjOXIq9lLRU44oAYdIr99p+JBLX1kxs+l/6LqGgSXwcVKAdDa1boSrOTELqYCkQQ0fpppXUGWi9o6JDT5zw==}
@@ -1254,6 +1289,12 @@ snapshots:
 
   '@types/estree@1.0.9': {}
 
+  '@types/node@24.13.3':
+    dependencies:
+      undici-types: 7.18.2
+
+  '@types/opentype.js@1.3.10': {}
+
   '@types/stats.js@0.17.4': {}
 
   '@types/three@0.184.1':
@@ -1267,28 +1308,28 @@ snapshots:
 
   '@types/webxr@0.5.24': {}
 
-  '@vitest/browser-preview@4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(vitest@4.1.10)':
+  '@vitest/browser-preview@4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(vitest@4.1.10)':
     dependencies:
       '@testing-library/dom': 10.4.1
       '@testing-library/user-event': 14.6.1(@testing-library/dom@10.4.1)
-      '@vitest/browser': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(vitest@4.1.10)
-      vitest: 4.1.10(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))
+      '@vitest/browser': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(vitest@4.1.10)
+      vitest: 4.1.10(@types/node@24.13.3)(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))
     transitivePeerDependencies:
       - bufferutil
       - msw
       - utf-8-validate
       - vite
 
-  '@vitest/browser@4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(vitest@4.1.10)':
+  '@vitest/browser@4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(vitest@4.1.10)':
     dependencies:
       '@blazediff/core': 1.9.1
-      '@vitest/mocker': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))
+      '@vitest/mocker': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))
       '@vitest/utils': 4.1.10
       magic-string: 0.30.21
       pngjs: 7.0.0
       sirv: 3.0.2
       tinyrainbow: 3.1.0
-      vitest: 4.1.10(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))
+      vitest: 4.1.10(@types/node@24.13.3)(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))
       ws: 8.21.0
     transitivePeerDependencies:
       - bufferutil
@@ -1305,13 +1346,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))':
+  '@vitest/mocker@4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))':
     dependencies:
       '@vitest/spy': 4.1.10
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: '@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3)'
+      vite: '@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3)'
 
   '@vitest/pretty-format@4.1.10':
     dependencies:
@@ -1337,13 +1378,14 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3)':
+  '@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3)':
     dependencies:
       '@oxc-project/runtime': 0.138.0
       '@oxc-project/types': 0.138.0
       lightningcss: 1.32.0
       postcss: 8.5.16
     optionalDependencies:
+      '@types/node': 24.13.3
       fsevents: 2.3.3
       typescript: 6.0.3
 
@@ -1382,6 +1424,8 @@ snapshots:
   assertion-error@2.0.1: {}
 
   chai@6.2.2: {}
+
+  clipper-lib@6.4.2: {}
 
   convert-source-map@2.0.0: {}
 
@@ -1473,7 +1517,12 @@ snapshots:
 
   obug@2.1.3: {}
 
-  oxfmt@0.57.0(vite-plus@0.2.4(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(typescript@6.0.3)):
+  opentype.js@1.3.4:
+    dependencies:
+      string.prototype.codepointat: 0.2.1
+      tiny-inflate: 1.0.3
+
+  oxfmt@0.57.0(vite-plus@0.2.4(@types/node@24.13.3)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(typescript@6.0.3)):
     dependencies:
       tinypool: 2.1.0
     optionalDependencies:
@@ -1496,7 +1545,7 @@ snapshots:
       '@oxfmt/binding-win32-arm64-msvc': 0.57.0
       '@oxfmt/binding-win32-ia32-msvc': 0.57.0
       '@oxfmt/binding-win32-x64-msvc': 0.57.0
-      vite-plus: 0.2.4(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(typescript@6.0.3)
+      vite-plus: 0.2.4(@types/node@24.13.3)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(typescript@6.0.3)
 
   oxlint-tsgolint@0.24.0:
     optionalDependencies:
@@ -1507,7 +1556,7 @@ snapshots:
       '@oxlint-tsgolint/win32-arm64': 0.24.0
       '@oxlint-tsgolint/win32-x64': 0.24.0
 
-  oxlint@1.72.0(oxlint-tsgolint@0.24.0)(vite-plus@0.2.4(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(typescript@6.0.3)):
+  oxlint@1.72.0(oxlint-tsgolint@0.24.0)(vite-plus@0.2.4(@types/node@24.13.3)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(typescript@6.0.3)):
     optionalDependencies:
       '@oxlint/binding-android-arm-eabi': 1.72.0
       '@oxlint/binding-android-arm64': 1.72.0
@@ -1529,7 +1578,7 @@ snapshots:
       '@oxlint/binding-win32-ia32-msvc': 1.72.0
       '@oxlint/binding-win32-x64-msvc': 1.72.0
       oxlint-tsgolint: 0.24.0
-      vite-plus: 0.2.4(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(typescript@6.0.3)
+      vite-plus: 0.2.4(@types/node@24.13.3)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(typescript@6.0.3)
 
   pathe@2.0.3: {}
 
@@ -1567,7 +1616,11 @@ snapshots:
 
   std-env@4.2.0: {}
 
+  string.prototype.codepointat@0.2.1: {}
+
   three@0.184.0: {}
+
+  tiny-inflate@1.0.3: {}
 
   tinybench@2.9.0: {}
 
@@ -1586,24 +1639,26 @@ snapshots:
 
   typescript@6.0.3: {}
 
-  vite-plus@0.2.4(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(typescript@6.0.3):
+  undici-types@7.18.2: {}
+
+  vite-plus@0.2.4(@types/node@24.13.3)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(typescript@6.0.3):
     dependencies:
       '@oxc-project/types': 0.138.0
       '@oxlint/plugins': 1.68.0
-      '@vitest/browser': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(vitest@4.1.10)
-      '@vitest/browser-preview': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(vitest@4.1.10)
+      '@vitest/browser': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(vitest@4.1.10)
+      '@vitest/browser-preview': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(vitest@4.1.10)
       '@vitest/expect': 4.1.10
-      '@vitest/mocker': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))
+      '@vitest/mocker': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))
       '@vitest/pretty-format': 4.1.10
       '@vitest/runner': 4.1.10
       '@vitest/snapshot': 4.1.10
       '@vitest/spy': 4.1.10
       '@vitest/utils': 4.1.10
-      '@voidzero-dev/vite-plus-core': 0.2.4(typescript@6.0.3)
-      oxfmt: 0.57.0(vite-plus@0.2.4(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(typescript@6.0.3))
-      oxlint: 1.72.0(oxlint-tsgolint@0.24.0)(vite-plus@0.2.4(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(typescript@6.0.3))
+      '@voidzero-dev/vite-plus-core': 0.2.4(@types/node@24.13.3)(typescript@6.0.3)
+      oxfmt: 0.57.0(vite-plus@0.2.4(@types/node@24.13.3)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(typescript@6.0.3))
+      oxlint: 1.72.0(oxlint-tsgolint@0.24.0)(vite-plus@0.2.4(@types/node@24.13.3)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(typescript@6.0.3))
       oxlint-tsgolint: 0.24.0
-      vitest: 4.1.10(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))
+      vitest: 4.1.10(@types/node@24.13.3)(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))
     optionalDependencies:
       '@voidzero-dev/vite-plus-darwin-arm64': 0.2.4
       '@voidzero-dev/vite-plus-darwin-x64': 0.2.4
@@ -1644,10 +1699,10 @@ snapshots:
       - vite
       - yaml
 
-  vitest@4.1.10(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3)):
+  vitest@4.1.10(@types/node@24.13.3)(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3)):
     dependencies:
       '@vitest/expect': 4.1.10
-      '@vitest/mocker': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))
+      '@vitest/mocker': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))
       '@vitest/pretty-format': 4.1.10
       '@vitest/runner': 4.1.10
       '@vitest/snapshot': 4.1.10
@@ -1664,10 +1719,11 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: '@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3)'
+      vite: '@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3)'
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@vitest/browser-preview': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(typescript@6.0.3))(vitest@4.1.10)
+      '@types/node': 24.13.3
+      '@vitest/browser-preview': 4.1.10(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(typescript@6.0.3))(vitest@4.1.10)
     transitivePeerDependencies:
       - msw
 

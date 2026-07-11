@@ -159,6 +159,78 @@
         font-size: 11px;
         line-height: 1.4;
       }
+      .la-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+        align-items: center;
+        margin: 6px 0;
+      }
+      .la-combo {
+        position: relative;
+        min-width: 0;
+      }
+      #laSuggest {
+        position: absolute;
+        top: calc(100% + 2px);
+        left: 0;
+        right: 0;
+        z-index: 10;
+        margin: 0;
+        padding: 2px;
+        list-style: none;
+        max-height: 176px;
+        overflow-y: auto;
+        font-size: 12px;
+        background: #fff;
+        border: 1px solid #ccd2da;
+        border-radius: 5px;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+      }
+      #laSuggest li {
+        padding: 3px 6px;
+        border-radius: 3px;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #laSuggest li:hover,
+      #laSuggest li.active {
+        background: #e8f0f7;
+      }
+      .la-row input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        font-size: 12px;
+        padding: 3px 5px;
+        border: 1px solid #ccd2da;
+        border-radius: 4px;
+      }
+      #laLookup {
+        padding: 4px 10px;
+        font-size: 12px;
+        color: #38404a;
+        background: #eef1f4;
+        border: 1px solid #ccd2da;
+        border-radius: 5px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #laLookup:hover {
+        background: #e2e7ec;
+      }
+      #laLookup:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #laStatus {
+        margin: 6px 0 0;
+        min-height: 14px;
+      }
+      #laStatus.err {
+        color: #b4442e;
+      }
     </style>
   </head>
   <body>
@@ -168,6 +240,41 @@
       <p class="sub">Finger-jointed box · sliding lid in hidden grooves · SVG cut files</p>
 
       <div id="controls"></div>
+
+      <section class="group" id="lidart">
+        <h2>Lid foil marque</h2>
+        <label class="toggle">
+          <input type="checkbox" id="laEnable" /> Engrave a commander marque
+        </label>
+        <div class="la-row">
+          <div class="la-combo">
+            <input
+              type="text"
+              id="laName"
+              placeholder="Commander name (e.g. Atraxa)"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="laSuggest"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <ul id="laSuggest" role="listbox" hidden></ul>
+          </div>
+          <button id="laLookup" type="button">Look up</button>
+        </div>
+        <label class="sel"
+          >Foil workflow
+          <select id="laMode">
+            <option value="single">Single-pass patch</option>
+            <option value="multi">Multi-pass</option>
+          </select>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="laUniform" /> Uniform coin size (mono matches 5-colour)
+        </label>
+        <div id="laStatus" class="sub"></div>
+      </section>
 
       <section class="group">
         <h2>View</h2>
@@ -201,8 +308,10 @@
         Drag to orbit · scroll to zoom · right-drag to pan. The SVGs are real-millimetre cut files
         (hairline red strokes), one file per sheet, kerf-compensated so the joints press-fit. Glue
         each inner side layer to its outer layer (the lamination hides the lid grooves), assemble,
-        and the lid slides dry — never glue it. The preview and the cut paths come from the same
-        outlines, so the box matches what you see.
+        and the lid slides dry — never glue it to the box. The lid frame glues onto the lid only:
+        slide the lid in first and centre the frame in its recess (front edges flush) so the recess
+        jigs it. The preview and the cut paths come from the same outlines, so the box matches what
+        you see.
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

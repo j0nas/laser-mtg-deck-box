@@ -3,6 +3,7 @@
 import { matchPreset } from "parametric-kit/params";
 import { describe, expect, test } from "vite-plus/test";
 import {
+  CAP,
   capacity,
   DECK_PRESETS,
   defaults,
@@ -30,14 +31,36 @@ describe("dims", () => {
     expect(d.outerD).toBeCloseTo(d.innerD + 2 * defaults.thickness);
   });
 
-  test("vertical stack-up: floor, cavity, groove, rail strip", () => {
+  test("vertical stack-up: floor, cavity, groove, rail strip (frame-shrunk by default)", () => {
     const d = dims(defaults);
     const t = defaults.thickness;
     expect(d.slotZ).toBeCloseTo(t + d.innerH);
     expect(d.slotH).toBeCloseTo(t + defaults.lidFit);
-    expect(d.railStrip).toBeCloseTo(Math.max(1.5 * t, 5));
+    // The default box carries the lid frame, so the rail strip shrinks to seat it flush.
+    expect(d.railStrip).toBeCloseTo(Math.max(t - defaults.lidFit, 0.6 * t));
+    expect(d.grooveStop).toBeCloseTo(Math.max(1.5 * t, 5));
     expect(d.wallH).toBeCloseTo(d.slotZ + d.slotH + d.railStrip);
     expect(d.assembledH).toBeCloseTo(d.wallH); // the lid is sunken: nothing sticks up
+  });
+
+  test("lid frame: flush top when on, classic tall rail strip when off", () => {
+    const t = defaults.thickness;
+    const on = dims(defaults);
+    // Flush: lid (slotZ..slotZ+t) plus frame (one more t) tops out exactly at the wall tops.
+    expect(on.capW).toBeGreaterThan(0);
+    expect(on.wallH).toBeCloseTo(on.slotZ + 2 * t);
+    expect(on.capW).toBeCloseTo(on.innerW - 2 * CAP.sideClear);
+    expect(on.capL).toBeCloseTo(on.lidL - CAP.backClear);
+    // Off: the old stack-up, unchanged.
+    const off = dims({ ...defaults, capRail: 0 });
+    expect(off.capW).toBe(0);
+    expect(off.capL).toBe(0);
+    expect(off.railStrip).toBeCloseTo(Math.max(1.5 * t, 5));
+    expect(off.wallH).toBeCloseTo(off.slotZ + off.slotH + Math.max(1.5 * t, 5));
+    // A rail too wide for the minimum window drops the frame — and the flush shrink with it.
+    const tiny = dims({ ...defaults, cardCount: 40, capRail: 12 });
+    expect(tiny.capW).toBe(0);
+    expect(tiny.railStrip).toBeCloseTo(Math.max(1.5 * t, 5));
   });
 
   test("the closing lid always clears the cards", () => {
@@ -86,9 +109,10 @@ describe("presets", () => {
 describe("materials", () => {
   test("nearest-match lookup with declaration-order tie-break", () => {
     expect(MATERIALS.map((m) => m.name)).toEqual(["1/8″ basswood ply", "3mm MDF", "1/8″ acrylic"]);
+    // All three stock sheets measure 3.0 mm, so every tie resolves to basswood (declared first) —
+    // the default material at the default (measured) thickness.
+    expect(materialFor(3.0).name).toBe("1/8″ basswood ply");
     expect(materialFor(3.2).name).toBe("1/8″ basswood ply");
-    expect(materialFor(3.0).name).toBe("3mm MDF"); // first declared at that thickness wins
-    expect(materialFor(3.1).name).toBe("1/8″ basswood ply"); // equidistant -> declaration order
     expect(materialFor(6).name).toBe("1/8″ basswood ply"); // nothing close -> nearest overall
   });
 });

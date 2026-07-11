@@ -1,11 +1,13 @@
-// Geometry tests for the eight sliding-lid panels: comb complementarity, kerf press-fit growth,
-// outline sanity, groove shape, assembled placement, and the lid. Pure Node — no DOM, no WASM.
+// Geometry tests for the nine sliding-lid panels: comb complementarity, kerf press-fit growth,
+// outline sanity, groove shape, assembled placement, the lid and its frame. Pure Node — no DOM,
+// no WASM.
 
 import { bbox, pointInPolygon as inPoly, signedArea } from "parametric-kit/testkit";
 import { BufferAttribute, BufferGeometry } from "three";
 import { describe, expect, test } from "vite-plus/test";
 import {
   applyPlace,
+  capSpec,
   combIntervals,
   fingerCount,
   LATCH,
@@ -13,7 +15,8 @@ import {
   type Panel,
   panels,
   placeMatrix,
-  type Pt,
+  pullHole,
+  thumbNotch,
 } from "./panels.ts";
 import { defaults, dims, type Params } from "./params.ts";
 
@@ -29,6 +32,7 @@ const IDS = [
   "side-right-outer",
   "body-floor",
   "lid",
+  "lid-cap",
 ];
 
 function panel(id: string, p: Params = defaults): Panel {
@@ -65,7 +69,7 @@ describe("comb math", () => {
 });
 
 describe("outlines", () => {
-  test("all eight panels exist, CCW, deduped, inside their declared size", () => {
+  test("all nine panels exist, CCW, deduped, inside their declared size", () => {
     const all = panels(defaults);
     expect(all.map((p) => p.id)).toEqual(IDS);
     for (const p of all) {
@@ -111,18 +115,38 @@ describe("outlines", () => {
     expect(inPoly(sideOut.outline, t / 2, 1.5 * seg)).toBe(true);
   });
 
-  test("the groove: inner layers open at the front, stopped at the back; outer layers solid", () => {
+  test("the groove: open at the front, stopped at a back ligament; outer layers solid", () => {
     const p0 = { ...defaults, kerf: 0 };
     const inner = panel("side-left-inner", p0);
     const outer = panel("side-left-outer", p0);
-    const midSlot: Pt = [d.outerD / 2, d.slotZ + d.slotH / 2];
-    expect(inPoly(inner.outline, ...midSlot)).toBe(false); // groove void
-    expect(inPoly(outer.outline, ...midSlot)).toBe(true); // lamination caps it
+    const midV = d.slotZ + d.slotH / 2;
+    const reach = d.outerD - t - d.grooveStop; // the groove's back end
+    expect(inPoly(inner.outline, d.outerD / 2, midV)).toBe(false); // groove void
+    expect(inPoly(outer.outline, d.outerD / 2, midV)).toBe(true); // lamination caps it
     // The rail strip above and the wall below the groove are material in both layers.
     expect(inPoly(inner.outline, d.outerD / 2, d.wallH - d.railStrip / 2)).toBe(true);
     expect(inPoly(inner.outline, d.outerD / 2, d.slotZ - 1)).toBe(true);
-    // Groove entry is open at the very front of the inner layer.
-    expect(inPoly(inner.outline, 0.5, d.slotZ + d.slotH / 2)).toBe(false);
+    // Groove entry is open at the very front of the inner layer; void runs to the back end.
+    expect(inPoly(inner.outline, 0.5, midV)).toBe(false);
+    expect(inPoly(inner.outline, reach - 2, midV)).toBe(false);
+    // MATERIAL through the ligament behind the groove: it sits inboard of the back comb's t-deep
+    // slot recesses, so the rail strip stays tied to the body whatever the comb phase.
+    expect(inPoly(inner.outline, d.outerD - t - d.grooveStop / 2, midV)).toBe(true);
+  });
+
+  test("ligament survives even when the back comb phases a slot across the groove band", () => {
+    // fingerWidth 20 makes the back comb's groove-height interval a SLOT (recessed to outerD - t)
+    // spanning the whole groove band — under the old outerD - t groove reach that severed the rail
+    // strip into a separate part. The ligament stops the groove short of the recess.
+    const p = { ...defaults, kerf: 0, fingerWidth: 20 };
+    const dd = dims(p);
+    const iv = combIntervals(dd.wallH, fingerCount(dd.wallH, p.fingerWidth), false, 0);
+    const band = iv.find((i) => i.a <= dd.slotZ && dd.slotZ + dd.slotH <= i.b);
+    expect(band).toBeDefined();
+    expect(band!.finger).toBe(false); // the premise: the groove band lies inside a slot recess
+    const inner = panel("side-left-inner", p);
+    const midV = dd.slotZ + dd.slotH / 2;
+    expect(inPoly(inner.outline, dd.outerD - p.thickness - dd.grooveStop / 2, midV)).toBe(true);
   });
 
   test("floor tabs fill the wall notches: t deep front/back, 2t deep through the sides", () => {
@@ -145,11 +169,21 @@ describe("outlines", () => {
     expect(inPoly(side.outline, t + tabD, t / 2)).toBe(false);
   });
 
-  test("lid: rectangle with latch notches and a pull hole; both disappear when disabled", () => {
+  test("lid: relieved back corners, latch notches, pull hole; optional features disappear", () => {
     const lid = panel("lid");
     const latch = latchSpec(defaults)!;
-    expect(lid.outline.length).toBe(12); // 4 corners + two edge notches
-    // Notch void at the nub's closed position, material just beyond it.
+    const backCut = d.grooveStop + defaults.lidFit;
+    expect(lid.outline.length).toBe(16); // 4 corners + two back reliefs + two latch notches
+    // Back-corner relief: void at both back corners, material between them and at the square
+    // front corners. The relief is longer than the ligament, so the shoulders sit lidFit short of
+    // the bridge faces and the back edge always bottoms out on the back wall first.
+    expect(inPoly(lid.outline, t / 2, d.lidL - 1)).toBe(false);
+    expect(inPoly(lid.outline, d.lidW - t / 2, d.lidL - 1)).toBe(false);
+    expect(inPoly(lid.outline, t + 2, d.lidL - 1)).toBe(true);
+    expect(inPoly(lid.outline, t / 2, 1)).toBe(true);
+    expect(inPoly(lid.outline, d.lidW - t / 2, 1)).toBe(true);
+    expect(backCut).toBeGreaterThan(d.grooveStop);
+    // Latch notch void at the nub's closed position, material just beyond it.
     expect(inPoly(lid.outline, d.lidW - t / 2, latch.uNub)).toBe(false);
     expect(inPoly(lid.outline, t / 2, latch.uNub)).toBe(false);
     expect(inPoly(lid.outline, d.lidW - t / 2, latch.uNub + LATCH.nubL)).toBe(true);
@@ -162,7 +196,7 @@ describe("outlines", () => {
       expect(y).toBeLessThan(d.lidL);
     }
     const bare = panel("lid", { ...defaults, lidPull: 0, latchBump: 0 });
-    expect(bare.outline.length).toBe(4);
+    expect(bare.outline.length).toBe(8); // the back relief is structural: it never disappears
     expect(bare.holes.length).toBe(0);
   });
 
@@ -186,7 +220,178 @@ describe("outlines", () => {
     // A tiny box has no room for the spring: latch quietly disappears.
     const tiny = { ...defaults, cardCount: 10, extraCards: 0, cardThickness: 0.305 };
     expect(latchSpec(tiny)).toBeNull();
-    expect(panels(tiny).find((pa) => pa.id === "lid")!.outline.length).toBe(4);
+    expect(panels(tiny).find((pa) => pa.id === "lid")!.outline.length).toBe(8); // relief stays
+  });
+});
+
+describe("thumb notch", () => {
+  const nt = thumbNotch(defaults)!;
+
+  test("scallops the front wall's top edge into a U-shaped void", () => {
+    const front = panel("body-front");
+    // Void through the notch: at the top-centre and just above the semicircular bottom.
+    expect(inPoly(front.outline, d.outerW / 2, d.slotZ - 1)).toBe(false);
+    expect(inPoly(front.outline, d.outerW / 2, d.slotZ - nt.depth + 1)).toBe(false);
+    // Material just below the notch bottom and to either side of it.
+    expect(inPoly(front.outline, d.outerW / 2, d.slotZ - nt.depth - 2)).toBe(true);
+    expect(inPoly(front.outline, nt.cx + nt.halfW + 2, d.slotZ - 1)).toBe(true);
+    expect(inPoly(front.outline, nt.cx - (nt.halfW + 2), d.slotZ - 1)).toBe(true);
+  });
+
+  test("off (width 0) leaves the top edge solid and returns null", () => {
+    const off = { ...defaults, notchWidth: 0 };
+    expect(inPoly(panel("body-front", off).outline, d.outerW / 2, d.slotZ - 1)).toBe(true);
+    expect(thumbNotch(off)).toBeNull();
+  });
+
+  test("dips inward only: envelope, size and winding stay nominal", () => {
+    const front = panel("body-front");
+    // The U cuts DOWN from the top edge, so the blank's max y is still the nominal top.
+    expect(Math.max(...front.outline.map((q) => q[1]))).toBeCloseTo(d.slotZ, 9);
+    expect(front.size).toEqual([d.outerW, d.slotZ]);
+    expect(signedArea(front.outline)).toBeGreaterThan(0);
+  });
+
+  test("depth floors to the semicircle radius so the bottom is a true half-round", () => {
+    // Width 30, innerW 68.5 -> halfW 15 (no width clamp); depth 5 floors up to halfW.
+    const nt2 = thumbNotch({ ...defaults, notchWidth: 30, notchDepth: 5 })!;
+    expect(nt2.halfW).toBe(15);
+    expect(nt2.depth).toBe(15);
+  });
+
+  test("default placement is front-only: the back wall stays solid", () => {
+    expect(defaults.notchWalls).toBe("front");
+    expect(inPoly(panel("body-back").outline, d.outerW / 2, d.wallH - 1)).toBe(true);
+  });
+
+  test("back placement: front solid, back notched down to the same lid-plane depth", () => {
+    const p = { ...defaults, notchWalls: "back" as const };
+    expect(inPoly(panel("body-front", p).outline, d.outerW / 2, d.slotZ - 1)).toBe(true);
+    const back = panel("body-back", p).outline;
+    // Void at the back wall's own top edge and just above the shared bottom (measured from the LID
+    // plane, slotZ — this pins the equal-bottom-Z invariant across the two wall heights)…
+    expect(inPoly(back, d.outerW / 2, d.wallH - 1)).toBe(false);
+    expect(inPoly(back, d.outerW / 2, d.slotZ - nt.depth + 1)).toBe(false);
+    // …and material just below that shared bottom.
+    expect(inPoly(back, d.outerW / 2, d.slotZ - nt.depth - 2)).toBe(true);
+  });
+
+  test("both placement: both walls scalloped at their top edges", () => {
+    const p = { ...defaults, notchWalls: "both" as const };
+    expect(inPoly(panel("body-front", p).outline, d.outerW / 2, d.slotZ - 1)).toBe(false);
+    expect(inPoly(panel("body-back", p).outline, d.outerW / 2, d.wallH - 1)).toBe(false);
+  });
+
+  test("a notched back wall keeps its nominal envelope and CCW winding", () => {
+    const back = panel("body-back", { ...defaults, notchWalls: "back" as const });
+    expect(Math.max(...back.outline.map((q) => q[1]))).toBeCloseTo(d.wallH, 9);
+    expect(back.size).toEqual([d.outerW, d.wallH]);
+    expect(signedArea(back.outline)).toBeGreaterThan(0);
+  });
+});
+
+describe("lid frame", () => {
+  const cap = capSpec(defaults)!;
+  const frame = panel("lid-cap");
+  const hole = frame.holes[0]!;
+  // Material at (x, y) in cap-local mm: inside the blank and not inside the window cutout.
+  const material = (x: number, y: number) => inPoly(frame.outline, x, y) && !inPoly(hole, x, y);
+
+  test("spec: sized to the recess, window inset by the rail, all ornaments present at defaults", () => {
+    expect(cap.w).toBeCloseTo(d.capW, 9);
+    expect(cap.l).toBeCloseTo(d.capL, 9);
+    expect(cap.window).toEqual({
+      x0: defaults.capRail,
+      y0: defaults.capRail,
+      x1: d.capW - defaults.capRail,
+      y1: d.capL - defaults.capRail,
+    });
+    expect(cap.scallop).not.toBeNull();
+    expect(cap.arch).not.toBeNull();
+    expect(cap.cusp).toBeGreaterThan(0);
+  });
+
+  test("a joint-free blank with a CW-wound window hole strictly inside it", () => {
+    expect(frame.outline.length).toBe(4); // plain rectangle: no combs, no reliefs
+    expect(frame.size).toEqual([cap.w, cap.l]);
+    expect(signedArea(hole)).toBeLessThan(0); // holes wind CW
+    for (const [x, y] of hole) {
+      expect(x).toBeGreaterThan(0);
+      expect(x).toBeLessThan(cap.w);
+      expect(y).toBeGreaterThan(0);
+      expect(y).toBeLessThan(cap.l);
+    }
+  });
+
+  test("window void in the middle, rail material on all four sides", () => {
+    expect(material(cap.w / 2, cap.l / 2)).toBe(false); // the window
+    expect(material(3, cap.l / 2)).toBe(true); // left rail
+    expect(material(cap.w - 3, cap.l / 2)).toBe(true); // right rail
+    expect(material(cap.w / 2, 0.7)).toBe(true); // front-rail ligament under the scallop
+    expect(material(cap.w / 2, cap.l - 0.7)).toBe(true); // back-rail ligament over the arch
+  });
+
+  test("thumb scallop: void dipped into the front rail, material either side of it", () => {
+    const s = cap.scallop!;
+    expect(material(s.cx, cap.window.y0 - s.depth / 2)).toBe(false); // inside the dip
+    expect(material(s.cx - s.halfW - 2, cap.window.y0 - s.depth / 2)).toBe(true);
+    expect(material(s.cx + s.halfW + 2, cap.window.y0 - s.depth / 2)).toBe(true);
+    // The dip keeps the CAP.scallopLig ligament: void just above it, material just below.
+    expect(material(s.cx, cap.window.y0 - s.depth + 0.3)).toBe(false);
+    expect(material(s.cx, cap.window.y0 - s.depth - 0.3)).toBe(true);
+  });
+
+  test("crown arch: void risen into the back rail at the centre, straight edge at the flanks", () => {
+    const a = cap.arch!;
+    const cx = cap.w / 2;
+    expect(material(cx, cap.window.y1 + 1)).toBe(false); // under the peak
+    expect(material(cx, cap.window.y1 + a.h + a.tip + 0.3)).toBe(true); // over the peak
+    expect(material(cx + a.halfW + 2, cap.window.y1 + 0.5)).toBe(true); // beyond the wings
+    expect(material(cx - a.halfW - 2, cap.window.y1 + 0.5)).toBe(true);
+    // The wing is concave: halfway out, the void has risen far less than half the arch height.
+    const midX = cx + (a.plateau + a.halfW) / 2;
+    expect(material(midX, cap.window.y1 + a.h * 0.45)).toBe(true);
+  });
+
+  test("cathedral cusps: frame material points into the window at each square corner", () => {
+    const { x0, y0, x1, y1 } = cap.window;
+    for (const [qx, qy] of [
+      [x0, y0],
+      [x1, y0],
+      [x0, y1],
+      [x1, y1],
+    ] as const) {
+      const inward = (v: number, lo: number) => (v === lo ? 1 : -1);
+      const dx = inward(qx, x0);
+      const dy = inward(qy, y0);
+      expect(material(qx + dx * 1, qy + dy * 1)).toBe(true); // inside the cusp's quarter disc
+      expect(material(qx + dx * (cap.cusp + 1), qy + dy * (cap.cusp + 1))).toBe(false); // past it
+    }
+  });
+
+  test("flush lamination: the frame rides the lid's top face and tops out at the wall height", () => {
+    expect(frame.place.pos).toEqual([(d.outerW - cap.w) / 2, 0, d.slotZ + t]);
+    expect(d.slotZ + 2 * t).toBeCloseTo(d.wallH, 9);
+  });
+
+  test("the pull hole rides above the window's front rail so it stays visible", () => {
+    const wide = pullHole({ ...defaults, capRail: 12 })!;
+    expect(wide.cy - wide.r).toBeGreaterThanOrEqual(12 + 1 - 1e-9); // clear of the front rail
+    const bare = pullHole({ ...defaults, capRail: 0 })!;
+    expect(bare.cy).toBeCloseTo(14, 9); // classic position without the frame
+  });
+
+  test("ornaments degrade on a skinny rail; the frame itself drops with its window", () => {
+    const skinny = capSpec({ ...defaults, capRail: 2 })!;
+    expect(skinny.scallop).toBeNull(); // no room for the ligament
+    expect(skinny.arch).toBeNull();
+    expect(skinny.cusp).toBe(0); // falls back to plain rounded corners
+    expect(capSpec({ ...defaults, capRail: 0 })).toBeNull();
+    expect(panels({ ...defaults, capRail: 0 }).map((p) => p.id)).not.toContain("lid-cap");
+    // Too small a box for the minimum window: the whole frame (and the flush shrink) drops.
+    const tiny = { ...defaults, cardCount: 40, capRail: 12 };
+    expect(capSpec(tiny)).toBeNull();
+    expect(dims(tiny).railStrip).toBeCloseTo(Math.max(1.5 * t, 5), 9);
   });
 });
 
@@ -243,6 +448,10 @@ describe("assembled placement", () => {
       lid: [
         [lidX, 0, d.slotZ],
         [lidX + d.lidW, d.lidL, d.slotZ + t],
+      ],
+      "lid-cap": [
+        [(d.outerW - d.capW) / 2, 0, d.slotZ + t],
+        [(d.outerW + d.capW) / 2, d.capL, d.slotZ + 2 * t],
       ],
     };
     const min = [Infinity, Infinity, Infinity];

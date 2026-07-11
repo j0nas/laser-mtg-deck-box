@@ -19,5 +19,12 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     environment: "node",
     globals: false,
+    // Inline vite-plus so its `vite-plus/test` re-export (`export * from "vitest"`) is transformed
+    // and resolves to the pool's ACTIVE vitest instance. Without this, `@types/node` in the peer
+    // graph spawns a second vite-plus/vitest variant, `describe` binds to the inactive runner, and
+    // every test file throws "Cannot read properties of undefined (reading 'config')" at collection.
+    // Still required on vite-plus 0.2.4 (latest as of 2026-07-11): the two peer-variants persist
+    // and `pnpm dedupe` cannot merge them (their peer sets genuinely differ).
+    server: { deps: { inline: ["vite-plus"] } },
   },
 });
