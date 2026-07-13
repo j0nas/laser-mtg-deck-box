@@ -92,7 +92,7 @@ export const schema = defineParams({
     max: 0.8,
     step: 0.05,
     group: "fit",
-    label: "Lid slide clearance",
+    label: "Lid & frame clearance",
   }),
   latchBump: num({
     def: 0.35,
@@ -184,13 +184,14 @@ export type Dims = {
 };
 
 // Lid-frame constants shared by dims() (fit decision), the panel builder and the marque layout.
-// sideClear is per side: enough air to jig the frame centred in its recess with paper shims and
-// still read as a crisp shadow line; backClear leaves the same kind of reveal off the back wall
+// The frame's side fit is NOT a constant: it rides the recess at lidFit/2 per side — the same fit
+// class as the sliding lid under it, so laminating the two layers with the lid parked in the box
+// self-centres the frame instead of leaving a visible gap. backClear keeps the frame off the back
+// wall so the LID (not the frame) is always what bottoms out, and reads as a deliberate reveal
 // when closed. The window keeps a scallopLig-wide ligament between the thumb scallop and the
 // frame's front edge, and drops entirely below minWindow — a frame without a window would just
 // blindfold the marque, so the whole frame drops with it.
 export const CAP = {
-  sideClear: 0.6,
   backClear: 1,
   windowR: 3, // fallback window corner radius, used only when the cathedral cusps drop
   minWindow: 16,
@@ -231,7 +232,7 @@ export function dims(p: Params): Dims {
   const slotH = t + p.lidFit;
   const lidW = innerW + 2 * t - p.lidFit;
   const lidL = innerD + t;
-  const capW = innerW - 2 * CAP.sideClear;
+  const capW = innerW - p.lidFit;
   const capL = lidL - CAP.backClear;
   const hasCap =
     p.capRail > 0 && capW - 2 * p.capRail >= CAP.minWindow && capL - 2 * p.capRail >= CAP.minWindow;

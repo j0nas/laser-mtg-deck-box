@@ -49,7 +49,8 @@ describe("dims", () => {
     // Flush: lid (slotZ..slotZ+t) plus frame (one more t) tops out exactly at the wall tops.
     expect(on.capW).toBeGreaterThan(0);
     expect(on.wallH).toBeCloseTo(on.slotZ + 2 * t);
-    expect(on.capW).toBeCloseTo(on.innerW - 2 * CAP.sideClear);
+    // The frame shares the lid's fit class: lidFit/2 per side against the recess walls.
+    expect(on.capW).toBeCloseTo(on.innerW - defaults.lidFit);
     expect(on.capL).toBeCloseTo(on.lidL - CAP.backClear);
     // Off: the old stack-up, unchanged.
     const off = dims({ ...defaults, capRail: 0 });
