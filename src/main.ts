@@ -4,7 +4,7 @@
 
 import * as opentype from "opentype.js";
 import { downloadText } from "parametric-kit/export";
-import { createStore, renderPanel } from "parametric-kit/params";
+import { createStore, installPanelCollapse, renderPanel } from "parametric-kit/params";
 import { createViewer, installAppHook } from "parametric-kit/viewer";
 import {
   CanvasTexture,
@@ -342,6 +342,13 @@ const panel = renderPanel(document.getElementById("controls")!, schema, params, 
     rebuild();
     updateReadout();
   },
+});
+
+// The whole panel collapses to its title bar so the preview is workable on phones — where it also
+// starts collapsed, since a 300px overlay covers most of a small viewport.
+const panelBox = document.getElementById("panel")!;
+installPanelCollapse(panelBox, panelBox.querySelector("h1")!, {
+  startCollapsed: window.matchMedia("(max-width: 640px)").matches,
 });
 
 // The hand-written sections (#lidart, #view) join the kit accordion's persisted blob under their

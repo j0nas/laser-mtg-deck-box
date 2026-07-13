@@ -41,6 +41,34 @@
       #panel h1 {
         font-size: 14px;
         margin: 0 0 2px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .panel-collapse {
+        font: inherit;
+        font-size: 11px;
+        line-height: 1;
+        padding: 2px 6px;
+        color: #7b8794;
+        background: none;
+        border: 1px solid #ccd2da;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .panel-collapse:hover {
+        color: #38404a;
+        border-color: #a9b2bd;
+      }
+      #panel.collapsed {
+        width: auto;
+      }
+      #panel.collapsed > :not(h1) {
+        display: none;
+      }
+      #panel.collapsed h1 {
+        margin: 0;
       }
       #panel .sub {
         color: #7b8794;
