@@ -303,33 +303,38 @@ function updateReadout(): void {
   warningsEl.innerHTML = warnings.join("<br>");
 }
 
+// Accordion sections group the schema by task: what you store (deck), what you retune after a test
+// cut (fit), the openings you choose once (retrieval + frame), and the machine side (material +
+// sheet). Only the deck section starts open; COLLAPSE_KEY remembers what the user opens. The
+// title-less cap/sheet groups continue the preceding section, keeping their own hints/visibility.
+const COLLAPSE_KEY = "laser-mtg-deck-box:collapse:v1";
 const panel = renderPanel(document.getElementById("controls")!, schema, params, {
+  collapsible: { key: COLLAPSE_KEY },
   groups: [
-    { id: "cards", title: "Cards", presets: ["deck", "sleeve"] },
+    { id: "cards", title: "Deck & cards", presets: ["deck", "sleeve"], open: true },
+    {
+      id: "fit",
+      title: "Fit & clearances",
+      hint: "Air around the card stack, plus the sliding fit: the lid glides in hidden grooves, clearance plus kerf sets the glide, and the same clearance sizes the lid frame against the recess walls — laminating with the lid parked in the box self-centres the frame. The latch is a spring cut into each groove that clicks into the lid's edge; raise the bump for a harder click.",
+    },
+    {
+      id: "retrieval",
+      title: "Retrieval & lid frame",
+      hint: "A finger in the pull hole slides the lid open; the hole doubles as a peek at the top card. The thumb notch scallops a wall's top edge so a thumb can drag the stack up — on the back wall it cuts deeper to reach the same card depth; a back notch leaves a small gap behind the closed lid.",
+    },
+    {
+      id: "cap",
+      hint: "The frame is a ninth panel glued onto the sunken lid: a picture frame whose window recesses the marque behind a charred border and sits flush with the box top (the rail strips shrink to make room). The window wears a legendary crown arch at the back and cathedral cusps in the corners; a thumb in it catches the front edge — widened by the scallop — and drags the lid open. Frame too small for a window and it drops from the cut.",
+    },
     {
       id: "material",
-      title: "Material & joints",
+      title: "Material & cutting",
       presets: ["material"],
       hint: (p) =>
         `Cut from ${materialFor(p.thickness).name}. Kerf grows every finger into a press-fit; ` +
         `fingers aim for ${p.fingerWidth} mm.`,
     },
-    {
-      id: "fit",
-      title: "Lid fit",
-      hint: "The lid slides in hidden grooves; clearance plus kerf sets the glide, and its back corners are relieved to clear the groove-end bridges. The latch is a spring cut into each groove that clicks into the lid's edge — raise the bump for a harder click.",
-    },
-    {
-      id: "retrieval",
-      title: "Retrieval",
-      hint: "A finger in the pull hole slides the lid open; the hole doubles as a peek at the top card. The thumb notch scallops a wall's top edge so a thumb can drag the stack up — on the back wall it cuts deeper to reach the same card depth; a back notch leaves a small gap behind the closed lid.",
-    },
-    {
-      id: "cap",
-      title: "Lid frame",
-      hint: "A ninth panel glued onto the sunken lid: a picture frame whose window recesses the marque behind a charred border and sits flush with the box top (the rail strips shrink to make room). The window wears a legendary crown arch at the back and cathedral cusps in the corners; a thumb in it catches the front edge — widened by the scallop — and drags the lid open. Frame too small for a window and it drops from the cut.",
-    },
-    { id: "sheet", title: "Sheet" },
+    { id: "sheet" },
   ],
   presets: [DECK_PRESETS, SLEEVE_PRESETS, MATERIAL_PRESETS],
   onChange: () => {
@@ -338,6 +343,33 @@ const panel = renderPanel(document.getElementById("controls")!, schema, params, 
     updateReadout();
   },
 });
+
+// The hand-written sections (#lidart, #view) join the kit accordion's persisted blob under their
+// element ids, so one key remembers the whole panel — kit-rendered and app-owned sections alike.
+function collapseState(): Record<string, unknown> {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? "null");
+    return typeof raw === "object" && raw !== null && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  } catch {
+    return {}; // storage disabled or bad JSON -> the markup's default open states
+  }
+}
+for (const details of document.querySelectorAll<HTMLDetailsElement>("#panel > details.group")) {
+  const saved = collapseState()[details.id];
+  if (typeof saved === "boolean") details.open = saved;
+  details.addEventListener("toggle", () => {
+    try {
+      localStorage.setItem(
+        COLLAPSE_KEY,
+        JSON.stringify({ ...collapseState(), [details.id]: details.open }),
+      );
+    } catch {
+      /* private mode / storage full — the section still toggles */
+    }
+  });
+}
 
 viewSelect.addEventListener("change", () => {
   rebuild();

@@ -64,6 +64,32 @@
         color: #9aa3ad;
         margin: 0 0 6px;
       }
+      #panel summary {
+        list-style: none;
+        cursor: pointer;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      #panel summary::-webkit-details-marker {
+        display: none;
+      }
+      #panel summary::before {
+        content: "▸";
+        font-size: 9px;
+        color: #9aa3ad;
+        transition: transform 0.15s;
+      }
+      #panel details[open] > summary::before {
+        transform: rotate(90deg);
+      }
+      #panel summary h2 {
+        margin: 0;
+      }
+      #panel details[open] > summary {
+        margin-bottom: 4px;
+      }
       .row {
         display: grid;
         grid-template-columns: 1fr 78px 48px;
@@ -241,8 +267,8 @@
 
       <div id="controls"></div>
 
-      <section class="group" id="lidart">
-        <h2>Lid foil marque</h2>
+      <details class="group" id="lidart">
+        <summary><h2>Lid foil marque</h2></summary>
         <label class="toggle">
           <input type="checkbox" id="laEnable" /> Engrave a commander marque
         </label>
@@ -274,10 +300,10 @@
           <input type="checkbox" id="laUniform" /> Uniform coin size (mono matches 5-colour)
         </label>
         <div id="laStatus" class="sub"></div>
-      </section>
+      </details>
 
-      <section class="group">
-        <h2>View</h2>
+      <details class="group" id="view" open>
+        <summary><h2>View</h2></summary>
         <label class="sel"
           >Preview
           <select id="viewMode">
@@ -298,7 +324,7 @@
             style="grid-column: 2 / 4"
           />
         </div>
-      </section>
+      </details>
 
       <button id="reset" type="button">Reset to defaults</button>
       <div id="dims"></div>

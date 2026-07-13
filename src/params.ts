@@ -50,12 +50,14 @@ export const schema = defineParams({
     group: "cards",
     label: "Card thickness",
   }),
+  // Clearance knobs live in the "fit" group with the lid glide and latch: they are all the air you
+  // retune after a test cut, as opposed to the card facts above that a sleeve preset sets once.
   sideClearance: num({
     def: 1,
     min: 0,
     max: 3,
     step: 0.1,
-    group: "cards",
+    group: "fit",
     label: "Side clearance",
   }),
   stackClearance: num({
@@ -63,10 +65,10 @@ export const schema = defineParams({
     min: 0,
     max: 10,
     step: 0.5,
-    group: "cards",
+    group: "fit",
     label: "Stack clearance",
   }),
-  headroom: num({ def: 2, min: 0, max: 5, step: 0.5, group: "cards", label: "Headroom" }),
+  headroom: num({ def: 2, min: 0, max: 5, step: 0.5, group: "fit", label: "Headroom" }),
 
   thickness: num({
     def: 3.0,
