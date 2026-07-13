@@ -358,8 +358,10 @@ const CROWN_MAX_H = 10;
 const PRIMARY_H_MAX = 10; // target cap height of the big name line
 const PRIMARY_H_MIN = 3.5; // below this the crown is dropped before shrinking further
 const PRIMARY_H_HARD_MIN = 3; // absolute floor for a name-only marque
-const EPITHET_RATIO = 0.45;
-const EPITHET_H_MIN = 2.2; // an epithet smaller than this is dropped instead
+const EPITHET_RATIO = 0.45; // preferred epithet cap height as a fraction of the primary's
+const EPITHET_H_MIN = 2.2; // an epithet that can't reach this (even at its floor) is dropped instead
+const EPITHET_H_MAX = 4.5; // absolute cap: a short epithet never rivals a full-height primary
+const EPITHET_MAX_RATIO = 0.75; // nor exceeds this fraction of the primary, keeping it subordinate
 const EGAP = 1.4; // primary ↔ epithet spacing
 const GAP = 2;
 const RULE_MARGIN = 2.2; // rules sit this far outside the name block (air gap = this − rule weight)
@@ -444,6 +446,25 @@ function primaryFitH(font: Font | null | undefined, text: string, availW: number
   const gh = gb.y2 - gb.y1;
   if (gw <= 0 || gh <= 0) return PRIMARY_H_MAX;
   return Math.min(PRIMARY_H_MAX, availW * 0.94 * (gh / gw));
+}
+
+// The small line's cap height, DECOUPLED from a flat fraction of the primary: a long primary is
+// shrunk to fit its width, which under the old `EPITHET_RATIO * primaryH` starved a perfectly short
+// epithet below the legibility floor and dropped it (e.g. "Ghyrson Starn, Kelemorph"). Here we aim
+// for EPITHET_RATIO of the primary but hold EPITHET_H_MIN as a floor, width-fit the epithet's own
+// text (its band is availW * 0.92, matching pushText), and keep it subordinate via EPITHET_H_MAX /
+// EPITHET_MAX_RATIO. Returns 0 when no readable, subordinate line survives — the caller then drops
+// the epithet (its text is too wide, or the primary is itself too small to carry one).
+function epithetLineH(
+  font: Font | null | undefined,
+  text: string,
+  primaryH: number,
+  availW: number,
+): number {
+  const widthFit = primaryFitH(font, text, availW * 0.92);
+  const subCap = Math.min(EPITHET_H_MAX, EPITHET_MAX_RATIO * primaryH);
+  const h = Math.min(Math.max(EPITHET_RATIO * primaryH, EPITHET_H_MIN), subCap, widthFit);
+  return h >= EPITHET_H_MIN ? h : 0;
 }
 
 // Produce the marque as a list of pass-tagged, lid-local elements. Empty when disabled or when the
@@ -596,7 +617,8 @@ export function layoutLidArt(p: Params, cfg: LidArt, assets: LidArtAssets = {}):
   const { primary, epithet } = splitName(cfg.name);
   const crownH = Math.min(CROWN_MAX_H, Math.max(CROWN_MIN_H, 0.14 * availW));
   const primaryTargetH = primaryFitH(assets.font, primary, availW);
-  const wantEpithet = epithet != null && EPITHET_RATIO * primaryTargetH >= EPITHET_H_MIN;
+  const epithetH = epithet != null ? epithetLineH(assets.font, epithet, primaryTargetH, availW) : 0;
+  const wantEpithet = epithetH > 0;
   // The arch is planned at the TARGET height only: every rung that keeps primaryTargetH keeps the
   // arch (its rise counted in the block height); the shrink rungs set the line straight instead.
   const arc = planArcName(assets.font, primary, primaryTargetH, availW);
@@ -613,7 +635,7 @@ export function layoutLidArt(p: Params, cfg: LidArt, assets: LidArtAssets = {}):
     2 * RULE_MARGIN +
     pl.primaryH +
     (pl.arc ? pl.arc.rise : 0) +
-    (pl.epithet ? EGAP + EPITHET_RATIO * pl.primaryH : 0);
+    (pl.epithet ? EGAP + epithetH : 0);
   const floorOf = (orbit: Orbit | null): number =>
     orbit ? Math.max(orbit.top + GAP, contentBottom) : contentBottom;
 
@@ -676,10 +698,9 @@ export function layoutLidArt(p: Params, cfg: LidArt, assets: LidArtAssets = {}):
     }
     y -= plan.primaryH + (plan.arc ? plan.arc.rise : 0);
     if (plan.epithet && epithet) {
-      const eh = EPITHET_RATIO * plan.primaryH;
       y -= EGAP;
-      pushText(els, "epithet", assets.font, epithet, cx, y - eh / 2, eh, availW * 0.92);
-      y -= eh;
+      pushText(els, "epithet", assets.font, epithet, cx, y - epithetH / 2, epithetH, availW * 0.92);
+      y -= epithetH;
     }
     y -= RULE_MARGIN;
     pushRules(els, cx, availW, blockTop, y);
