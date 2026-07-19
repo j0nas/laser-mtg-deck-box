@@ -52,129 +52,30 @@
 // Rz(rot[2])·Ry(rot[1])·Rx(rot[0]) applied to the local point, plus pos. Consumers should not
 // re-derive this: use applyPlace() (or placeMatrix() for a three.js Matrix4.fromArray).
 
+import {
+  circleCW,
+  combIntervals,
+  dedupe,
+  fingerCount,
+  type Panel,
+  type Pt,
+} from "parametric-kit/laser";
 import { CAP, dims, type Params } from "./params.ts";
 
-export type Pt = [number, number];
-
-export type Place = { pos: [number, number, number]; rot: [number, number, number] };
-
-export type Panel = {
-  id: string;
-  outline: Pt[]; // closed CCW polygon, panel-local mm, origin at the bbox min corner; first point not repeated
-  holes: Pt[][]; // interior cutouts (CW wound)
-  size: [number, number]; // outline bounding box, = the blank's nominal envelope
-  place: Place;
-};
-
-// --- finger-count policy -------------------------------------------------------------------
-//
-// Largest odd n (>= 3) such that each segment (edgeLen / n) is still >= 0.6 * fingerWidth. Odd n
-// means a comb starts and ends with the same element, so each panel edge is symmetric.
-export function fingerCount(edgeLen: number, fingerWidth: number): number {
-  const minSeg = fingerWidth * 0.6;
-  let n = Math.floor(edgeLen / minSeg);
-  if (n % 2 === 0) n -= 1;
-  if (n < 3) n = 3;
-  return n;
-}
-
-// Segment i is an "A" element (the material/finger/tab side) iff its parity matches firstIsA.
-export function isFinger(i: number, firstIsA: boolean): boolean {
-  return (i % 2 === 0) === firstIsA;
-}
-
-// --- kerf-adjusted comb breakpoints ---------------------------------------------------------
-//
-// n+1 breakpoints along [0, length], nominal at i·length/n. With kerf k, every INTERNAL breakpoint
-// shifts k/2 toward the slot side of that boundary (fingers grow, slots shrink); the two outer
-// breakpoints never move, so the panel's own envelope stays nominal. An interior finger therefore
-// grows by a full k, an end finger by k/2 — mirroring how the laser eats k/2 from each cut face.
-export function combBreakpoints(
-  length: number,
-  n: number,
-  firstIsA: boolean,
-  kerf: number,
-): number[] {
-  const pts: number[] = [];
-  for (let i = 0; i <= n; i++) pts.push((length * i) / n);
-  for (let i = 1; i < n; i++) {
-    const prevIsFinger = isFinger(i - 1, firstIsA);
-    pts[i]! += prevIsFinger ? kerf / 2 : -kerf / 2;
-  }
-  return pts;
-}
-
-export type Interval = { a: number; b: number; finger: boolean };
-
-// The comb as labeled intervals — the unit the tests reason about.
-export function combIntervals(
-  length: number,
-  n: number,
-  firstIsA: boolean,
-  kerf: number,
-): Interval[] {
-  const bp = combBreakpoints(length, n, firstIsA, kerf);
-  const out: Interval[] = [];
-  for (let i = 0; i < n; i++) out.push({ a: bp[i]!, b: bp[i + 1]!, finger: isFinger(i, firstIsA) });
-  return out;
-}
-
-// --- rotation/placement --------------------------------------------------------------------
-
-// world = Rz(rz)·Ry(ry)·Rx(rx) · local + pos (x-rotation applied first).
-export function applyPlace(pt: [number, number, number], place: Place): [number, number, number] {
-  const [rx, ry, rz] = place.rot;
-  let [x, y, z] = pt;
-  // Rx
-  [y, z] = [y * Math.cos(rx) - z * Math.sin(rx), y * Math.sin(rx) + z * Math.cos(rx)];
-  // Ry
-  [x, z] = [x * Math.cos(ry) + z * Math.sin(ry), -x * Math.sin(ry) + z * Math.cos(ry)];
-  // Rz
-  [x, y] = [x * Math.cos(rz) - y * Math.sin(rz), x * Math.sin(rz) + y * Math.cos(rz)];
-  return [x + place.pos[0], y + place.pos[1], z + place.pos[2]];
-}
-
-// Column-major 4×4 of the same transform, ready for three.js Matrix4.fromArray().
-export function placeMatrix(place: Place): number[] {
-  const o = applyPlace([0, 0, 0], place);
-  const ex = applyPlace([1, 0, 0], place);
-  const ey = applyPlace([0, 1, 0], place);
-  const ez = applyPlace([0, 0, 1], place);
-  const d = (v: [number, number, number]) => [v[0] - o[0], v[1] - o[1], v[2] - o[2]];
-  const [bx, by, bz] = [d(ex), d(ey), d(ez)];
-  return [
-    bx[0]!,
-    bx[1]!,
-    bx[2]!,
-    0,
-    by[0]!,
-    by[1]!,
-    by[2]!,
-    0,
-    bz[0]!,
-    bz[1]!,
-    bz[2]!,
-    0,
-    o[0],
-    o[1],
-    o[2],
-    1,
-  ];
-}
-
-// --- outline builders ----------------------------------------------------------------------
-
-function dedupe(pts: Pt[]): Pt[] {
-  const out: Pt[] = [];
-  for (const p of pts) {
-    const last = out[out.length - 1];
-    if (!last || Math.abs(last[0] - p[0]) > 1e-9 || Math.abs(last[1] - p[1]) > 1e-9) out.push(p);
-  }
-  const first = out[0]!;
-  const last = out[out.length - 1]!;
-  if (Math.abs(first[0] - last[0]) < 1e-9 && Math.abs(first[1] - last[1]) < 1e-9) out.pop();
-  return out;
-}
+// The shared flat-panel primitives (types, comb math, placement transforms) live in
+// parametric-kit/laser; re-exported so panel consumers and tests keep one import surface.
+export {
+  applyPlace,
+  combBreakpoints,
+  combIntervals,
+  fingerCount,
+  type Interval,
+  isFinger,
+  type Panel,
+  type Place,
+  placeMatrix,
+  type Pt,
+} from "parametric-kit/laser";
 
 // --- lid flex latch --------------------------------------------------------------------------
 //
@@ -388,8 +289,6 @@ function lidOutline(
   return dedupe(pts);
 }
 
-const HOLE_SEGS = 24;
-
 // --- the lid frame ----------------------------------------------------------------------------
 //
 // All in CAP-LOCAL mm, origin at the frame blank's min corner, y up — the same frame as the lid's,
@@ -563,15 +462,6 @@ export function thumbNotch(p: Params): ThumbNotch | null {
   depth = Math.min(depth, d.slotZ - p.thickness - 8); // leave a strip of wall below the notch
   if (depth < halfW) return null;
   return { cx: d.outerW / 2, halfW, depth };
-}
-
-function circleCW(cx: number, cy: number, r: number): Pt[] {
-  const pts: Pt[] = [];
-  for (let i = 0; i < HOLE_SEGS; i++) {
-    const th = (-2 * Math.PI * i) / HOLE_SEGS; // negative sweep -> CW hole winding
-    pts.push([cx + r * Math.cos(th), cy + r * Math.sin(th)]);
-  }
-  return pts;
 }
 
 // --- the nine panels -------------------------------------------------------------------------

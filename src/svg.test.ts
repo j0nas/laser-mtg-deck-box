@@ -139,7 +139,7 @@ describe("sheetSvg", () => {
   test("maps panel-local y-up coordinates into SVG y-down at the placement", () => {
     const p: Params = { ...defaults };
     const panel = panels(p)[0]!;
-    const svg = sheetSvg({ placements: [{ panel, x: 10, y: 20 }] }, p);
+    const svg = sheetSvg({ placements: [{ panel, x: 10, y: 20 }], material: null }, p);
     const [ox, oy] = panel.outline[0]!;
     const first = svg.match(/d="M([\d.]+) ([\d.]+)/)!;
     expect(Number(first[1])).toBeCloseTo(10 + ox, 3);

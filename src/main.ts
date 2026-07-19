@@ -6,18 +6,16 @@ import * as opentype from "opentype.js";
 import { downloadText } from "parametric-kit/export";
 import { createStore, installPanelCollapse, renderPanel } from "parametric-kit/params";
 import { createViewer, installAppHook } from "parametric-kit/viewer";
+import { panelGeometry } from "parametric-kit/laser/preview";
 import {
   CanvasTexture,
   DoubleSide,
-  ExtrudeGeometry,
   Group,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  Path,
   PlaneGeometry,
-  Shape,
   SRGBColorSpace,
   type Texture,
 } from "three";
@@ -124,16 +122,8 @@ const EXPLODE_DIR: Record<string, [number, number, number]> = {
 };
 
 function panelMesh(panel: Panel, matrix: Matrix4, face: number, edge: number): Mesh {
-  const shape = new Shape();
-  panel.outline.forEach(([x, y], i) => (i === 0 ? shape.moveTo(x, y) : shape.lineTo(x, y)));
-  shape.closePath();
-  for (const hole of panel.holes) {
-    const path = new Path();
-    hole.forEach(([x, y], i) => (i === 0 ? path.moveTo(x, y) : path.lineTo(x, y)));
-    path.closePath();
-    shape.holes.push(path);
-  }
-  const geo = new ExtrudeGeometry(shape, { depth: params.thickness, bevelEnabled: false });
+  // placed:false — the world placement stays on the mesh matrix so explode can offset it.
+  const geo = panelGeometry(panel, params.thickness, { placed: false });
   // Material group 0 = the two sheet faces, group 1 = the cut walls (end grain).
   const mesh = new Mesh(geo, [
     new MeshStandardMaterial({ color: face, roughness: 0.85, metalness: 0 }),
