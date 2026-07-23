@@ -151,11 +151,24 @@ export function sanitizeLidArt(raw: unknown): LidArt {
 
 // Split "Atraxa, Praetors' Voice" into the big line and the small line. The comma is stripped; no
 // comma (or nothing after it) → single line.
+//
+// Comma-less "X the Y" titles ("Zedruu the Greathearted") split too, at an interior " the ", with
+// "the" kept on the small line. The leading space in the match is what keeps a name that merely
+// STARTS with "The" ("The Ur-Dragon", "The Mimeoplasm") on one line — there's nothing before it to
+// promote to a primary. A comma always wins, so "Marisi, Breaker of the Coil" splits at the comma.
 export function splitName(name: string): { primary: string; epithet: string | null } {
   const i = name.indexOf(",");
-  if (i < 0) return { primary: name.trim(), epithet: null };
-  const epithet = name.slice(i + 1).trim();
-  return { primary: name.slice(0, i).trim(), epithet: epithet.length > 0 ? epithet : null };
+  if (i >= 0) {
+    const epithet = name.slice(i + 1).trim();
+    return { primary: name.slice(0, i).trim(), epithet: epithet.length > 0 ? epithet : null };
+  }
+  const m = /\sthe\s/i.exec(name);
+  if (m) {
+    const primary = name.slice(0, m.index).trim();
+    const epithet = name.slice(m.index).trim(); // keeps the "the"
+    if (primary.length > 0 && epithet.length > 0) return { primary, epithet };
+  }
+  return { primary: name.trim(), epithet: null };
 }
 
 // Base coin diameter by colour-identity count: mono/duo/trio get the big 14 mm coins, four-colour

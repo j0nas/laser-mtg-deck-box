@@ -82,6 +82,26 @@ describe("splitName", () => {
     expect(splitName("Krenko,")).toEqual({ primary: "Krenko", epithet: null });
     expect(splitName("  Krenko  ")).toEqual({ primary: "Krenko", epithet: null });
   });
+  test("comma-less 'X the Y' title splits at ' the ', keeping 'the' on the small line", () => {
+    expect(splitName("Zedruu the Greathearted")).toEqual({
+      primary: "Zedruu",
+      epithet: "the Greathearted",
+    });
+    expect(splitName("Isu the Abominable")).toEqual({
+      primary: "Isu",
+      epithet: "the Abominable",
+    });
+  });
+  test("a name that merely starts with 'The' stays one line", () => {
+    expect(splitName("The Ur-Dragon")).toEqual({ primary: "The Ur-Dragon", epithet: null });
+    expect(splitName("The Mimeoplasm")).toEqual({ primary: "The Mimeoplasm", epithet: null });
+  });
+  test("a comma wins over an interior ' the '", () => {
+    expect(splitName("Marisi, Breaker of the Coil")).toEqual({
+      primary: "Marisi",
+      epithet: "Breaker of the Coil",
+    });
+  });
 });
 
 describe("composition at Commander defaults", () => {
