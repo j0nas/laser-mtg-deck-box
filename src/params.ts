@@ -143,6 +143,20 @@ export const schema = defineParams({
     group: "cap",
     label: "Frame rail (0 = off)",
   }),
+  // What the frame shows the world: "window" cuts the ornamented window out of it, recessing the
+  // marque onto the lid beneath a charred border (the window edge is the pull); "solid" leaves the
+  // face uncut — the marque rides the frame's TOP face instead (engraved, foiled or pierced,
+  // lidart.ts), the pull hole drills through frame AND lid, and the thumb scallop becomes a THUMB
+  // WELL cut through the frame just behind its front edge (its flat front wall is the pull bar —
+  // the lid opens toward you, so an open-front notch would give the thumb nothing to pull
+  // against). On the solid face the rail width only gates the frame on/off (there is no window
+  // for it to size) and the minimum-window rule is waived, so boxes too small for a window can
+  // still carry a marque face.
+  capFace: pick(["window", "solid"] as const, {
+    def: "window",
+    group: "cap",
+    label: "Frame face",
+  }),
   capScallop: num({
     def: 16,
     min: 0,
@@ -192,12 +206,18 @@ export type Dims = {
 // wall so the LID (not the frame) is always what bottoms out, and reads as a deliberate reveal
 // when closed. The window keeps a scallopLig-wide ligament between the thumb scallop and the
 // frame's front edge, and drops entirely below minWindow — a frame without a window would just
-// blindfold the marque, so the whole frame drops with it.
+// blindfold the marque, so the whole frame drops with it. Both rules are window-face-only: the
+// SOLID face has no window, so its scallop is instead a THUMB WELL through the frame —
+// solidScallopLig is the pull bar between the well and the frame's front edge (it takes the
+// opening pull, but the full-face lamination to the lid carries that easily), and
+// solidScallopMax caps the well's depth so the marque zone above keeps its room.
 export const CAP = {
   backClear: 1,
   windowR: 3, // fallback window corner radius, used only when the cathedral cusps drop
   minWindow: 16,
   scallopLig: 1.5,
+  solidScallopLig: 2.5,
+  solidScallopMax: 8,
 };
 
 // Derived panel dimensions, shared by the panel-geometry builder, SVG export and the tests.
@@ -236,8 +256,10 @@ export function dims(p: Params): Dims {
   const lidL = innerD + t;
   const capW = innerW - p.lidFit;
   const capL = lidL - CAP.backClear;
-  const hasCap =
-    p.capRail > 0 && capW - 2 * p.capRail >= CAP.minWindow && capL - 2 * p.capRail >= CAP.minWindow;
+  // The window face needs room for its minimum window; the solid face has no window, so any
+  // rail > 0 keeps the frame (the rail value itself is then just the on/off switch).
+  const windowFits = capW - 2 * p.capRail >= CAP.minWindow && capL - 2 * p.capRail >= CAP.minWindow;
+  const hasCap = p.capRail > 0 && (p.capFace === "solid" || windowFits);
   const railStrip = hasCap ? Math.max(t - p.lidFit, 0.6 * t) : Math.max(1.5 * t, 5);
   const grooveStop = Math.max(1.5 * t, 5);
   const wallH = slotZ + slotH + railStrip;

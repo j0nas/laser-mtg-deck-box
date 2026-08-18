@@ -34,7 +34,13 @@ declare module "clipper-lib" {
     ClipType: { ctIntersection: number; ctUnion: number; ctDifference: number; ctXor: number };
     PolyFillType: { pftEvenOdd: number; pftNonZero: number };
     JoinType: { jtSquare: number; jtRound: number; jtMiter: number };
-    EndType: { etClosedPolygon: number; etClosedLine: number };
+    EndType: {
+      etClosedPolygon: number;
+      etClosedLine: number;
+      etOpenButt: number;
+      etOpenRound: number;
+      etOpenSquare: number;
+    };
   }
 
   const ClipperLib: ClipperLibApi;

@@ -375,6 +375,44 @@ export function offsetRings(rings: Ring[], deltaMm: number): Ring[] {
   return fromInt(offsetI(toInt(oriented), deltaMm));
 }
 
+// Union of closed rings, public for the pierced marque (lidart.ts): the crown's overlapping
+// subpaths (end dots over ribbon tips) must become clean disjoint outlines before they are CUT —
+// two overlapping closed paths would double-cut the crossing. Orientation is normalised per ring
+// like offsetRings, so callers can pass hand-built same-wound subpaths.
+export function unionRings(rings: Ring[]): Ring[] {
+  const oriented = rings.map((r) => (ringsArea([r]) < 0 ? [...r].reverse() : r));
+  return fromInt(boolOp(ClipType.ctUnion, toInt(oriented), []));
+}
+
+// Region booleans over ring sets, public for the wall engravings (sideart.ts): routing the border
+// pinstripe around the thumb-notch keep-out is a difference; cropping a pattern's bands to the
+// engravable field is an intersection. NO orientation normalisation — inputs must be
+// nonzero-consistent (CCW outers, CW holes), which hand-built CCW rings and any Clipper output
+// (offsetRings, strokeRings, a previous clipRings) already are. Normalising here would flip a
+// band's hole into a solid, so it is deliberately absent.
+export function clipRings(
+  op: "difference" | "intersection",
+  subject: Ring[],
+  clip: Ring[],
+): Ring[] {
+  const ct = op === "difference" ? ClipType.ctDifference : ClipType.ctIntersection;
+  return fromInt(boolOp(ct, toInt(subject), toInt(clip)));
+}
+
+// Thin engraved bands from centreline polylines: each line dilated by width/2 with round joins and
+// round end caps (closed = true treats each ring as a closed line and yields an annular band).
+// The vector-stroke primitive for the wall patterns — LightBurn ignores stroke-width, so every
+// engraved "line" must ship as a closed filled region. Output is Clipper-oriented (holes wound
+// opposite the outers), safe for clipRings and identical under either fill rule.
+export function strokeRings(lines: Ring[], widthMm: number, closed = false): Ring[] {
+  if (lines.length === 0 || widthMm <= 0) return [];
+  const co = new ClipperLib.ClipperOffset(2, ARC_TOL);
+  co.AddPaths(toInt(lines), JoinType.jtRound, closed ? EndType.etClosedLine : EndType.etOpenRound);
+  const solution: IntPath[] = [];
+  co.Execute(solution, (widthMm / 2) * SCALE);
+  return fromInt(solution);
+}
+
 // Total signed area of a flat ring list (mm²) — public so tests can sanity-check winding.
 export function ringsArea(rings: Ring[]): number {
   let total = 0;

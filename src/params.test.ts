@@ -64,6 +64,16 @@ describe("dims", () => {
     expect(tiny.railStrip).toBeCloseTo(Math.max(1.5 * t, 5));
   });
 
+  test("solid frame face: the minimum-window rule is waived, rail > 0 is just the on switch", () => {
+    const t = defaults.thickness;
+    // The same box that drops the window-faced frame above keeps a solid-faced one, flush shrink
+    // included — a solid face has no window to be too small for.
+    const tiny = dims({ ...defaults, cardCount: 40, capRail: 12, capFace: "solid" as const });
+    expect(tiny.capW).toBeGreaterThan(0);
+    expect(tiny.railStrip).toBeCloseTo(Math.max(t - defaults.lidFit, 0.6 * t));
+    expect(dims({ ...defaults, capRail: 0, capFace: "solid" as const }).capW).toBe(0);
+  });
+
   test("the closing lid always clears the cards", () => {
     const d = dims(defaults);
     // Cards top out at floor + cardHeight; the lid's underside is the groove floor.

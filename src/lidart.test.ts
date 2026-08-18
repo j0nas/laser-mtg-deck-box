@@ -13,6 +13,8 @@ import {
   HOLE_CLEAR,
   type LidArt,
   layoutLidArt,
+  marquePanel,
+  PIERCE_RULE_W,
   PIP_MIN_D,
   PIP_UNIFORM_D,
   pipBaseD,
@@ -22,7 +24,7 @@ import {
   visibleZone,
 } from "./lidart.ts";
 import { capSpec, pullHole } from "./panels.ts";
-import { defaults, dims, type Params } from "./params.ts";
+import { CAP, defaults, dims, type Params } from "./params.ts";
 
 const fontBuf = readFileSync(fileURLToPath(new URL("./assets/Cinzel-Bold.ttf", import.meta.url)));
 const font = opentype.parse(
@@ -36,7 +38,7 @@ const SYMBOLS = JSON.parse(
 const enabled = (over: Partial<LidArt> = {}): LidArt => ({
   ...DEFAULT_LID_ART,
   enabled: true,
-  name: "Atraxa, Praetors' Voice",
+  name: "Vexara, Crown of Embers",
   pips: ["W", "U", "B", "G"],
   symbolPaths: SYMBOLS,
   ...over,
@@ -68,38 +70,59 @@ const zoneConfined = (id: string) => id !== "frame-trace";
 
 describe("splitName", () => {
   test("splits at the first comma and strips it", () => {
-    expect(splitName("Atraxa, Praetors' Voice")).toEqual({
-      primary: "Atraxa",
-      epithet: "Praetors' Voice",
+    expect(splitName("Vexara, Crown of Embers")).toEqual({
+      primary: "Vexara",
+      epithet: "Crown of Embers",
     });
-    expect(splitName("Kenrith, the Returned King")).toEqual({
-      primary: "Kenrith",
-      epithet: "the Returned King",
+    expect(splitName("Aldric, the Wandering King")).toEqual({
+      primary: "Aldric",
+      epithet: "the Wandering King",
     });
   });
   test("no comma -> single line; empty epithet -> single line", () => {
-    expect(splitName("Krenko")).toEqual({ primary: "Krenko", epithet: null });
-    expect(splitName("Krenko,")).toEqual({ primary: "Krenko", epithet: null });
-    expect(splitName("  Krenko  ")).toEqual({ primary: "Krenko", epithet: null });
+    expect(splitName("Borvak")).toEqual({ primary: "Borvak", epithet: null });
+    expect(splitName("Borvak,")).toEqual({ primary: "Borvak", epithet: null });
+    expect(splitName("  Borvak  ")).toEqual({ primary: "Borvak", epithet: null });
   });
   test("comma-less 'X the Y' title splits at ' the ', keeping 'the' on the small line", () => {
-    expect(splitName("Zedruu the Greathearted")).toEqual({
-      primary: "Zedruu",
-      epithet: "the Greathearted",
+    expect(splitName("Maravel the Kindhearted")).toEqual({
+      primary: "Maravel",
+      epithet: "the Kindhearted",
     });
-    expect(splitName("Isu the Abominable")).toEqual({
-      primary: "Isu",
-      epithet: "the Abominable",
+    expect(splitName("Torvun the Implacable")).toEqual({
+      primary: "Torvun",
+      epithet: "the Implacable",
     });
   });
-  test("a name that merely starts with 'The' stays one line", () => {
-    expect(splitName("The Ur-Dragon")).toEqual({ primary: "The Ur-Dragon", epithet: null });
-    expect(splitName("The Mimeoplasm")).toEqual({ primary: "The Mimeoplasm", epithet: null });
+  test("comma-less 'X of Y' title splits at ' of ', keeping 'of' on the small line", () => {
+    expect(splitName("Selora of Ravenmoor")).toEqual({
+      primary: "Selora",
+      epithet: "of Ravenmoor",
+    });
+    expect(splitName("Warden of Ashfall")).toEqual({
+      primary: "Warden",
+      epithet: "of Ashfall",
+    });
+  });
+  test("the earliest particle wins, so a compound 'of the' stays whole on the small line", () => {
+    expect(splitName("King of the Hollowmere")).toEqual({
+      primary: "King",
+      epithet: "of the Hollowmere",
+    });
+    expect(splitName("Maravel the Warden of Ash")).toEqual({
+      primary: "Maravel",
+      epithet: "the Warden of Ash",
+    });
+  });
+  test("a name that merely starts with a particle stays one line", () => {
+    expect(splitName("The Everwyrm")).toEqual({ primary: "The Everwyrm", epithet: null });
+    expect(splitName("The Marrowveil")).toEqual({ primary: "The Marrowveil", epithet: null });
+    expect(splitName("Of Ashes Reborn")).toEqual({ primary: "Of Ashes Reborn", epithet: null });
   });
   test("a comma wins over an interior ' the '", () => {
-    expect(splitName("Marisi, Breaker of the Coil")).toEqual({
-      primary: "Marisi",
-      epithet: "Breaker of the Coil",
+    expect(splitName("Serwyn, Breaker of the Dawn")).toEqual({
+      primary: "Serwyn",
+      epithet: "Breaker of the Dawn",
     });
   });
 });
@@ -135,16 +158,17 @@ describe("composition at Commander defaults", () => {
     expect(trace.pass).toBe("foilGold");
     expect(trace.paths.length).toBeGreaterThanOrEqual(2); // outer silhouette + inset ring(s)
     const cap = capSpec(defaults)!;
+    const win = cap.window!;
     const d = dims(defaults);
     const xoff = (d.lidW - cap.w) / 2;
     // Bbox spans the window plus its ornaments: scallop below the front edge, arch above the back.
-    expect(trace.bbox.x0).toBeCloseTo(xoff + cap.window.x0, 6);
-    expect(trace.bbox.x1).toBeCloseTo(xoff + cap.window.x1, 6);
-    expect(trace.bbox.y0).toBeCloseTo(cap.window.y0 - cap.scallop!.depth, 6);
-    expect(trace.bbox.y1).toBeCloseTo(cap.window.y1 + cap.arch!.h + cap.arch!.tip, 6);
+    expect(trace.bbox.x0).toBeCloseTo(xoff + win.x0, 6);
+    expect(trace.bbox.x1).toBeCloseTo(xoff + win.x1, 6);
+    expect(trace.bbox.y0).toBeCloseTo(win.y0 - cap.scallop!.depth, 6);
+    expect(trace.bbox.y1).toBeCloseTo(win.y1 + cap.arch!.h + cap.arch!.tip, 6);
     // The band hugs the edge: it never reaches the marque zone.
     const vz = visibleZone(defaults);
-    const bandOuterAtLeft = xoff + cap.window.x0;
+    const bandOuterAtLeft = xoff + win.x0;
     expect(vz.x0 - bandOuterAtLeft).toBeGreaterThan(0.5); // zone margin exceeds the band width
     // Frame off -> no trace (the pinstripe border returns instead).
     const bare = layoutLidArt(mk({ capRail: 0 }), enabled(), { font });
@@ -417,11 +441,175 @@ describe("degradation", () => {
   });
 });
 
+describe("engraved finish (all wood)", () => {
+  const foil = layoutLidArt(defaults, enabled(), { font });
+  const engraved = layoutLidArt(defaults, enabled({ finish: "engraved" }), { font });
+
+  test("every element lands on the engrave pass — no foil anywhere", () => {
+    expect(engraved.length).toBeGreaterThan(0);
+    for (const el of engraved) expect(el.pass, el.id).toBe("engrave");
+  });
+
+  test("no frame trace: the glue-peel guide is foil-workflow-only", () => {
+    expect(foil.map((e) => e.id)).toContain("frame-trace");
+    expect(engraved.find((e) => e.id === "frame-trace")).toBeUndefined();
+  });
+
+  test("the composition is otherwise identical: same ids, same bboxes", () => {
+    // Coins add their glyph split; the trace drops; everything else must land pixel-identical,
+    // so switching finish never re-flows a marque the user already approved.
+    const strip = (ids: string[]) =>
+      ids.filter((id) => id !== "frame-trace" && !id.endsWith("-glyph")).sort();
+    expect(strip(engraved.map((e) => e.id))).toEqual(strip(foil.map((e) => e.id)));
+    const name = (els: typeof foil) => els.find((e) => e.id === "name")!;
+    expect(name(engraved).bbox).toEqual(name(foil).bbox);
+    const pip = (els: typeof foil) => els.find((e) => e.id === "pip-0")!;
+    expect(pip(engraved).bbox).toEqual(pip(foil).bbox);
+  });
+
+  test("coins are ring + dark glyph: an annulus (two discs, even-odd) with the glyph inside", () => {
+    const ring = engraved.find((e) => e.id === "pip-0")!;
+    expect(ring.fillRule).toBe("evenodd");
+    expect((ring.paths.join("").match(/M/g) ?? []).length).toBe(2); // outer + inner circle
+    const glyph = engraved.find((e) => e.id === "pip-0-glyph")!;
+    expect(glyph.pass).toBe("engrave");
+    // The glyph shrinks to sit inside the ring with air: its points stay well off the ring Ø.
+    const pipD = ring.bbox.x1 - ring.bbox.x0;
+    const cx = (ring.bbox.x0 + ring.bbox.x1) / 2;
+    const cy = (ring.bbox.y0 + ring.bbox.y1) / 2;
+    const pts = glyph.paths.flatMap((d) => flattenPathData(d, 0.05, undefined, 1, false)).flat();
+    for (const [x, y] of pts) {
+      expect(Math.hypot(x - cx, y - cy)).toBeLessThanOrEqual(pipD / 2 - 0.9);
+    }
+  });
+
+  test("a missing glyph degrades that coin to its bare ring", () => {
+    const els = layoutLidArt(defaults, enabled({ finish: "engraved", symbolPaths: {} }), { font });
+    expect(els.find((e) => e.id === "pip-0")).toBeTruthy();
+    expect(els.find((e) => e.id === "pip-0-glyph")).toBeUndefined();
+  });
+});
+
+describe("solid frame face (marque on the frame's top)", () => {
+  const p = mk({ capFace: "solid" });
+  const els = layoutLidArt(p, enabled(), { font });
+  const cap = capSpec(p)!;
+  const vz = visibleZone(p);
+  // The marque is CAP-local there; pullHole speaks lid-local, one rail-strip further out in x.
+  const lidHole = pullHole(p)!;
+  const hole = { ...lidHole, cx: lidHole.cx - (dims(p).lidW - cap.w) / 2 };
+
+  test("routing: the marque targets the lid-cap panel; window face and bare lid keep the lid", () => {
+    expect(marquePanel(p)).toBe("lid-cap");
+    expect(marquePanel(defaults)).toBe("lid");
+    expect(marquePanel(mk({ capRail: 0, capFace: "solid" }))).toBe("lid");
+  });
+
+  test("the zone is the frame's own face: cap-local, centred, lifted above the thumb well", () => {
+    expect(vz.x0).toBeGreaterThan(0);
+    expect(vz.x1).toBeLessThan(cap.w);
+    expect(vz.y1).toBeLessThan(cap.l);
+    expect(vz.y0).toBeGreaterThanOrEqual(CAP.solidScallopLig + cap.scallop!.depth);
+    expect((vz.x0 + vz.x1) / 2).toBeCloseTo(cap.w / 2, 6);
+  });
+
+  test("no frame trace, even in the foil finish — there is no window cut to peel against", () => {
+    expect(els.length).toBeGreaterThan(0);
+    expect(els.map((e) => e.id)).not.toContain("frame-trace");
+  });
+
+  test("every element confined to the zone and clear of the cap-local pull hole", () => {
+    for (const el of els) {
+      expect(inside(el.bbox, vz), el.id).toBe(true);
+      if (ENCIRCLES_HOLE.has(el.id)) continue;
+      if (el.id.startsWith("pip-")) {
+        const cx = (el.bbox.x0 + el.bbox.x1) / 2;
+        const cy = (el.bbox.y0 + el.bbox.y1) / 2;
+        const r = (el.bbox.x1 - el.bbox.x0) / 2;
+        expect(Math.hypot(cx - hole.cx, cy - hole.cy) - r).toBeGreaterThanOrEqual(
+          hole.r + HOLE_CLEAR - 1e-6,
+        );
+      } else {
+        expect(bboxToPoint(el.bbox, hole.cx, hole.cy)).toBeGreaterThanOrEqual(
+          hole.r + HOLE_CLEAR - 1e-6,
+        );
+      }
+    }
+  });
+
+  test("the pinstripe border returns once the front band has room for it", () => {
+    // Scallop + pull hole together crowd the front band, so the default solid face runs
+    // borderless like a cramped bare lid…
+    expect(els.map((e) => e.id)).not.toContain("border");
+    // …but with the scallop off, the hole tucks inside the border ring — the bare-lid layout.
+    const roomy = layoutLidArt(mk({ capFace: "solid", capScallop: 0 }), enabled(), { font });
+    expect(roomy.map((e) => e.id)).toContain("border");
+  });
+});
+
+describe("pierced finish (fretwork on the solid frame face)", () => {
+  const p = mk({ capFace: "solid" });
+  const els = layoutLidArt(p, enabled({ finish: "pierced" }), { font });
+  const passOf = new Map(els.map((e) => [e.id, e.pass]));
+
+  test("island-free ornament cuts; everything with interior detail engraves; no foil anywhere", () => {
+    expect(passOf.get("crown")).toBe("cut");
+    expect(passOf.get("name-rules")).toBe("cut");
+    expect(passOf.get("name")).toBe("engrave");
+    expect(passOf.get("epithet")).toBe("engrave");
+    for (const el of els) expect(el.pass, el.id).not.toBe("foilGold");
+  });
+
+  test("nothing cut may contain an island: every cut ring winds the same way (no loose scrap)", () => {
+    const cut = els.filter((e) => e.pass === "cut");
+    expect(cut.length).toBeGreaterThan(0);
+    for (const el of cut) {
+      const rings = el.paths.flatMap((d) => flattenPathData(d, 0.02, undefined, 1, false));
+      const signs = rings.map((r) => Math.sign(ringsArea([r])));
+      for (const s of signs) expect(s, el.id).toBe(signs[0]);
+    }
+  });
+
+  test("the crown is unioned into disjoint outlines: gem + two ribbon-and-dot wings", () => {
+    const crown = els.find((e) => e.id === "crown")!;
+    const rings = crown.paths.flatMap((d) => flattenPathData(d, 0.02, undefined, 1, false));
+    expect(rings.length).toBe(3);
+  });
+
+  test("rules thicken to the self-clearing slit width", () => {
+    const rules = els.find((e) => e.id === "name-rules")!;
+    for (const bar of rules.paths) {
+      const ys = flattenPathData(bar, 0.05, undefined, 1, false)
+        .flat()
+        .map(([, y]) => y);
+      expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(PIERCE_RULE_W, 6);
+    }
+  });
+
+  test("coins keep the engraved ring-and-glyph treatment (a cut ring drops its centre disc)", () => {
+    const row = layoutLidArt(mk({ capFace: "solid", lidPull: 0 }), enabled({ finish: "pierced" }), {
+      font,
+    });
+    const ring = row.find((e) => e.id === "pip-0")!;
+    expect(ring.pass).toBe("engrave");
+    expect((ring.paths.join("").match(/M/g) ?? []).length).toBe(2); // annulus: outer + inner circle
+    expect(row.find((e) => e.id === "pip-0-glyph")!.pass).toBe("engrave");
+  });
+
+  test("without the solid face behind it, pierced degrades to the engraved treatment", () => {
+    for (const q of [defaults, mk({ capRail: 0 })]) {
+      const fallback = layoutLidArt(q, enabled({ finish: "pierced" }), { font });
+      expect(fallback.length).toBeGreaterThan(0);
+      for (const el of fallback) expect(el.pass, el.id).toBe("engrave");
+    }
+  });
+});
+
 describe("sanitizeLidArt", () => {
   test("an old blob with retired raster keys loads cleanly (keys silently dropped)", () => {
     const old = {
       enabled: true,
-      name: "Atraxa, Praetors' Voice",
+      name: "Vexara, Crown of Embers",
       pips: ["W", "U", "B", "G"],
       passMode: "multi",
       artBand: true,
@@ -433,17 +621,23 @@ describe("sanitizeLidArt", () => {
     const clean = sanitizeLidArt(old);
     expect(clean).toEqual({
       enabled: true,
-      name: "Atraxa, Praetors' Voice",
+      name: "Vexara, Crown of Embers",
       pips: ["W", "U", "B", "G"],
       symbolPaths: {},
       passMode: "multi",
       uniformPips: false,
+      finish: "foil", // pre-finish blobs keep their historic foil look
+      sides: "none",
+      sideLayout: "framed", // the retired raster `layout` key does not leak into the wall layout
     });
     expect(Object.keys(clean).sort()).toEqual([
       "enabled",
+      "finish",
       "name",
       "passMode",
       "pips",
+      "sideLayout",
+      "sides",
       "symbolPaths",
       "uniformPips",
     ]);
@@ -458,12 +652,23 @@ describe("sanitizeLidArt", () => {
       pips: ["W", "X", 5, "G"], // pinned to the symbol alphabet
       symbolPaths: { W: "M0 0L1 0L1 1Z", X: "M0 0", U: 42 },
       passMode: "sideways",
+      finish: "chrome", // pinned to the finish alphabet
+      sides: "everything", // pinned to the side styles
+      sideLayout: "banana", // pinned to the layout alphabet
     });
     expect(clean.enabled).toBe(false);
     expect(clean.name).toBe("");
     expect(clean.pips).toEqual(["W", "G"]);
     expect(clean.symbolPaths).toEqual({ W: "M0 0L1 0L1 1Z" });
     expect(clean.passMode).toBe("single");
+    expect(clean.finish).toBe("foil");
+    expect(clean.sides).toBe("none");
+    expect(clean.sideLayout).toBe("framed");
+    expect(sanitizeLidArt({ finish: "engraved", sides: "seigaiha" }).finish).toBe("engraved");
+    expect(sanitizeLidArt({ finish: "pierced" }).finish).toBe("pierced");
+    expect(sanitizeLidArt({ finish: "engraved", sides: "seigaiha" }).sides).toBe("seigaiha");
+    expect(sanitizeLidArt({ sides: "full" }).sides).toBe("none"); // pre-pattern blobs reset
+    expect(sanitizeLidArt({ sideLayout: "full" }).sideLayout).toBe("full");
   });
 
   test("pips are sorted into canonical WUBRG order", () => {
@@ -479,12 +684,13 @@ describe("visible zone", () => {
   test("with the lid frame on (default) it is the frame's window, inset past the corner cusps", () => {
     const vz = visibleZone(defaults);
     const cap = capSpec(defaults)!;
+    const win = cap.window!;
     const d = dims(defaults);
     const xoff = (d.lidW - cap.w) / 2;
     // Inset ≥ cusp/√2 on every side: the zone's rect corners clear the cusps' quarter discs.
-    const m = Math.min(vz.x0 - (xoff + cap.window.x0), vz.y0 - cap.window.y0);
+    const m = Math.min(vz.x0 - (xoff + win.x0), vz.y0 - win.y0);
     expect(m).toBeGreaterThanOrEqual(cap.cusp * Math.SQRT1_2 - 1e-9);
-    expect(vz.x1 - vz.x0).toBeLessThan(cap.window.x1 - cap.window.x0);
+    expect(vz.x1 - vz.x0).toBeLessThan(win.x1 - win.x0);
     expect((vz.x0 + vz.x1) / 2).toBeCloseTo(d.lidW / 2, 6); // centred on the lid
   });
 

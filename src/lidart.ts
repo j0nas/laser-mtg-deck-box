@@ -1,8 +1,9 @@
 // Lid foil marque ("commander marque"): the parametric layout engine for the ALL-VECTOR foil
 // composition on the deck-box lid. PURE and DOM-free — the same element list drives the SVG export
-// (svg.ts), the 3D preview overlay (main.ts) and the tests. All geometry is in LID-LOCAL
-// millimetres, y UP, origin at the lid blank's min corner — exactly the frame of the lid panel's
-// `outline`, so the export can flip and place it with the panel it belongs to.
+// (svg.ts), the 3D preview overlay (main.ts) and the tests. All geometry is in the MARQUE PANEL's
+// local millimetres (the lid, or the lid frame when its face is solid — see marquePanel below),
+// y UP, origin at that panel blank's min corner — exactly the frame of the panel's `outline`, so
+// the export can flip and place it with the panel it belongs to.
 //
 // ---------------------------------------------------------------------------------------------
 // COMPOSITION (front edge y = 0 at the bottom; the pull hole sits near it)
@@ -50,28 +51,96 @@
 // foil stays on #0000ff — engrave the recessed glyph first, then bond the disc around it. LightBurn
 // ignores stroke-width and <text>, so every element is a CLOSED, FILLED region; the name is
 // converted to glyph outlines via opentype.js.
+//
+// LID FINISH: the marque ships in three finishes. "foil" is the composition above. "engraved" is
+// the ALL-WOOD variant — the same composition charred directly into the marque face, no foil
+// anywhere: every element lands on the dark-engrave layer, and the coins trade the knockout foil
+// disc for a thin engraved RING with the real glyph engraved dark inside it (a heavy charred disc
+// would read as a printed decal on bare wood; ring-and-glyph reads as a maker's stamp). The frame
+// trace is skipped — it exists only as the foil glue-peel guide — and the foil workflow mode is
+// simply irrelevant. The composition, degradation ladder and keep-outs are identical, so a box
+// re-cut in the other finish keeps its exact layout.
+//
+// "pierced" is the FRETWORK variant, honoured only when the marque rides the frame's SOLID face
+// (see MARQUE PANEL below — the lid backs the frame, so the openings show its face one thickness
+// down in shadow and never open into the card cavity): the island-free bold ornament CUTS clean
+// through the frame — the crown (its overlapping subpaths unioned into disjoint outlines, no
+// double-cut crossings) and the name rules (thickened to PIERCE_RULE_W so the freed slivers drop
+// out instead of wedging back) — while everything with interior detail engraves on top exactly
+// like the engraved finish. That split IS the detail-loss analysis: cut text sheds its counters
+// (the island inside every A, O or R falls out with the scrap) and its sub-half-millimetre serif
+// webs char away at these cap heights, and a cut coin ring drops its centre disc — so name,
+// epithet, coins and border stay charred, and only shapes that survive piercing pierce. Anywhere
+// without the solid face behind it, "pierced" quietly degrades to the engraved treatment.
+//
+// MARQUE PANEL: all geometry above is in the MARQUE PANEL's local frame — the lid, or, when the
+// lid frame's face is SOLID (capFace, panels.ts), the lid-cap panel itself: the marque then rides
+// the frame's TOP face (flush with the box top) in CAP-local mm, the pull hole (which pierces
+// frame and lid together there) is mapped into that frame, and the pinstripe border returns since
+// no charred window edge frames the composition. marquePanel() is the one source of that routing
+// for the SVG export, the preview overlay and the sheet pinning.
 
-import { healCoin, type HealedCoin, offsetRings, type Ring } from "./heal.ts";
+import {
+  flattenPathData,
+  healCoin,
+  type HealedCoin,
+  offsetRings,
+  type Ring,
+  unionRings,
+} from "./heal.ts";
 import { capSpec, capWindowHole, pullHole } from "./panels.ts";
-import { dims, type Params } from "./params.ts";
+import { CAP, dims, type Params } from "./params.ts";
 
 // Types from opentype.js — imported as TYPES only, so this module stays runtime-pure (no opentype
 // import, no fs, no DOM). The caller (browser or Node test) parses the font and passes it.
 import type { Font, PathCommand } from "opentype.js";
 
-export type LidArtPass = "foilGold" | "engrave";
+export type LidArtPass = "foilGold" | "engrave" | "cut";
 export type PassMode = "single" | "multi";
+export type LidFinish = "foil" | "engraved" | "pierced";
+// Wall engraving patterns (sideart.ts); the config lives here so one persisted blob carries the
+// lid marque and the walls together. "none" or a pattern id — see sideart.ts for what each draws.
+export const SIDE_STYLES = [
+  "none",
+  "lattice",
+  "chevron",
+  "herringbone",
+  "yabane",
+  "basketweave",
+  "meander",
+  "sunburst",
+  "ogee",
+  "tatewaku",
+  "guilloche",
+  "starcross",
+  "seigaiha",
+  "asanoha",
+  "kagome",
+  "kikko",
+  "shippo",
+  "hitomezashi",
+  "dunes",
+  "mana",
+] as const;
+export type SideStyle = (typeof SIDE_STYLES)[number];
+// How a wall wears its pattern: "framed" nests it inside the border pinstripe's field (the
+// classic treatment), "full" drops the border and bleeds the pattern to the panel's cut edges.
+export type SideLayout = "framed" | "full";
 
-// The persisted, serialisable marque config (its own localStorage blob in main.ts). The Scryfall
-// symbol glyphs are part of the EXPORTED geometry, so they persist here too — a reload must not
+// The persisted, serialisable art config (its own localStorage blob in main.ts): the lid marque
+// plus the wall engravings, which share the commander name/identity and the symbol glyphs. The
+// Scryfall glyphs are part of the EXPORTED geometry, so they persist here too — a reload must not
 // lose the marque the user saw.
 export type LidArt = {
-  enabled: boolean;
+  enabled: boolean; // gates the LID marque; the wall engravings are gated by `sides` alone
   name: string;
   pips: string[]; // colour-identity symbol codes, e.g. ["W", "U", "B", "G"]
   symbolPaths: Record<string, string>; // symbol code -> raw glyph path d (Scryfall 0..100 viewBox)
-  passMode: PassMode;
+  passMode: PassMode; // foil workflow; irrelevant in the engraved finish
   uniformPips: boolean; // every identity count uses the 5-colour coin size (consistent across decks)
+  finish: LidFinish; // gold foil marque vs. the all-wood engraved variant
+  sides: SideStyle; // wall engravings: "none" or a pattern id (sideart.ts)
+  sideLayout: SideLayout; // framed field vs full bleed; moot while sides is "none"
 };
 
 export type Bbox = { x0: number; y0: number; x1: number; y1: number };
@@ -92,12 +161,23 @@ export type LidArtAssets = {
 export const MIN_FOIL = 0.4; // minimum foil stroke / feature width (mm)
 export const HOLE_CLEAR = 1.5; // keep every element this far off the pull cut
 export const FRAME_TRACE_BAND = 0.5; // width of the frame's glue-peel trace band (mm)
+// Pierced-finish rule width: a cut slit this wide sheds its freed sliver cleanly — a MIN_FOIL
+// (0.4 mm) ribbon of ply tends to wedge back into its own slit after the cut.
+export const PIERCE_RULE_W = 0.8;
 
 export const PIP_MAX_D = 14; // coin Ø for 1–3 colour identities (mm)
 export const PIP_UNIFORM_D = 9; // the 5-colour size — uniformPips pins EVERY count to it
 export const PIP_MIN_D = 6; // coins shrink to this floor before the orbit drops
 const PIP_GAP = 0.8; // clearance between adjacent coins and off the pull-hole keep-out
 const PIP_SHRINK_STEP = 0.5;
+
+// The engraved-finish coin: a thin charred ring with the glyph engraved dark inside it. The ring
+// is the coin's silhouette (same pipD envelope as the foil coin, so the orbit maths are shared);
+// the glyph shrinks to leave RING_GAP of bare wood inside the ring — a coin whose interior can't
+// host a legible glyph (below GLYPH_MIN_D) stays a plain ring.
+export const ENGRAVE_RING_W = 0.45;
+const ENGRAVE_RING_GAP = 1.0;
+const ENGRAVE_GLYPH_MIN_D = 3.5;
 
 const SYMBOL_CODES = ["W", "U", "B", "R", "G", "C"] as const; // canonical WUBRG(C) display order
 
@@ -115,6 +195,9 @@ export const DEFAULT_LID_ART: LidArt = {
   symbolPaths: {},
   passMode: "single",
   uniformPips: false,
+  finish: "foil",
+  sides: "none",
+  sideLayout: "framed",
 };
 
 // Rebuild a clean LidArt from an untrusted storage blob — same strictness as the kit's sanitize:
@@ -146,23 +229,32 @@ export function sanitizeLidArt(raw: unknown): LidArt {
     symbolPaths,
     passMode: o.passMode === "multi" ? "multi" : "single",
     uniformPips: typeof o.uniformPips === "boolean" ? o.uniformPips : d.uniformPips,
+    finish: o.finish === "engraved" || o.finish === "pierced" ? o.finish : "foil",
+    sides:
+      typeof o.sides === "string" && (SIDE_STYLES as readonly string[]).includes(o.sides)
+        ? (o.sides as SideStyle)
+        : "none",
+    sideLayout: o.sideLayout === "full" ? "full" : "framed",
   };
 }
 
-// Split "Atraxa, Praetors' Voice" into the big line and the small line. The comma is stripped; no
-// comma (or nothing after it) → single line.
+// Split a "Name, Epithet" card title into the big line and the small line. The comma is
+// stripped; no comma (or nothing after it) → single line.
 //
-// Comma-less "X the Y" titles ("Zedruu the Greathearted") split too, at an interior " the ", with
-// "the" kept on the small line. The leading space in the match is what keeps a name that merely
-// STARTS with "The" ("The Ur-Dragon", "The Mimeoplasm") on one line — there's nothing before it to
-// promote to a primary. A comma always wins, so "Marisi, Breaker of the Coil" splits at the comma.
+// Comma-less titles built on a particle ("Maravel the Kindhearted", "Selora of Ravenmoor") split
+// too, at the EARLIEST interior " the " or " of ", with the particle kept on the small line. Taking
+// the earliest is what keeps a compound "of the" together — "King of the Hollowmere" breaks after
+// "King", not after "King of", which would strand a dangling "of" at the end of the big line. The
+// leading space in the match is what keeps a name that merely STARTS with the particle ("The
+// Everwyrm") on one line — there's nothing before it to promote to a primary. A comma always wins,
+// so "Serwyn, Breaker of the Dawn" splits at the comma.
 export function splitName(name: string): { primary: string; epithet: string | null } {
   const i = name.indexOf(",");
   if (i >= 0) {
     const epithet = name.slice(i + 1).trim();
     return { primary: name.slice(0, i).trim(), epithet: epithet.length > 0 ? epithet : null };
   }
-  const m = /\sthe\s/i.exec(name);
+  const m = /\s(?:the|of)\s/i.exec(name);
   if (m) {
     const primary = name.slice(0, m.index).trim();
     const epithet = name.slice(m.index).trim(); // keeps the "the"
@@ -193,21 +285,49 @@ export function pipBaseD(n: number, uniform = false): number {
 //
 // Without the frame, the lid rides one groove-depth into each side wall, so `hidden` mm at each x
 // edge is buried and never seen; along y the whole lid face shows. We inset a small foil-safety
-// margin off the front and back cut edges. Either way this is the box the whole marque is
+// margin off the front and back cut edges.
+//
+// With the frame's SOLID face, the zone is the frame's own top face (CAP-local — the marque
+// overlays the lid-cap panel), inset by a small edge margin and lifted above the thumb well
+// (front bar + well depth) when one is cut. Whichever case, this is the box the whole marque is
 // confined to (asserted by the tests).
 const CAP_ART_MARGIN = 0.8;
+// Margin off the solid frame face's cut edges; the zone also starts above the thumb well, so the
+// composition (border included) never crosses its cutout.
+const SOLID_FACE_MARGIN = 2;
+
+// Which panel carries the marque: the lid (classic — bare, or recessed behind the frame's
+// window), or the frame itself when its face is SOLID. Element coordinates, the visible zone and
+// the mapped pull hole are all local to this panel — the export, preview and sheet pinning route
+// by it.
+export function marquePanel(p: Params): "lid" | "lid-cap" {
+  const cap = capSpec(p);
+  return cap != null && cap.window == null ? "lid-cap" : "lid";
+}
 
 export function visibleZone(p: Params): Bbox {
   const d = dims(p);
   const cap = capSpec(p);
-  if (cap) {
+  if (cap?.window) {
+    const win = cap.window;
     const xoff = (d.lidW - cap.w) / 2;
     const m = Math.max(CAP_ART_MARGIN, cap.cusp * Math.SQRT1_2 + 0.05);
     return {
-      x0: xoff + cap.window.x0 + m,
-      y0: cap.window.y0 + m,
-      x1: xoff + cap.window.x1 - m,
-      y1: cap.window.y1 - m,
+      x0: xoff + win.x0 + m,
+      y0: win.y0 + m,
+      x1: xoff + win.x1 - m,
+      y1: win.y1 - m,
+    };
+  }
+  if (cap) {
+    // The SOLID frame face, in CAP-LOCAL coordinates (the marque overlays the lid-cap panel —
+    // see marquePanel): the whole top face is the canvas, flush with the box top.
+    const m = SOLID_FACE_MARGIN;
+    return {
+      x0: m,
+      y0: m + (cap.scallop ? CAP.solidScallopLig + cap.scallop.depth : 0),
+      x1: cap.w - m,
+      y1: cap.l - m,
     };
   }
   const hidden = (d.lidW - d.innerW) / 2; // groove depth per side (x only)
@@ -254,8 +374,11 @@ function polyPath(pts: [number, number][]): string {
   return pts.map(([x, y], i) => `${i === 0 ? "M" : "L"}${nfmt(x)} ${nfmt(y)}`).join("") + "Z";
 }
 
-// Healed-coin rings (coin-local mm) -> one path-data string translated to (dx, dy).
-function ringsToPath(rings: Ring[], dx: number, dy: number): string {
+// Healed-coin rings (coin-local mm) -> one path-data string translated to (dx, dy). Exported (with
+// healedCoin below) as the shared vector vocabulary of the art modules: sideart.ts emits its bands
+// and stamps its mana glyphs through these same primitives, so lid and walls can never drift in
+// path style.
+export function ringsToPath(rings: Ring[], dx: number, dy: number): string {
   return rings
     .map(
       (ring) =>
@@ -354,7 +477,7 @@ function roundRing(
 // different path data can never serve a stale coin.
 const coinCache = new Map<string, HealedCoin>();
 
-function healedCoin(glyphD: string, sizeMm: number): HealedCoin {
+export function healedCoin(glyphD: string, sizeMm: number): HealedCoin {
   const key = `${sizeMm.toFixed(2)}|${glyphD}`;
   const hit = coinCache.get(key);
   if (hit) return hit;
@@ -463,11 +586,12 @@ function primaryFitH(font: Font | null | undefined, text: string, availW: number
 
 // The small line's cap height, DECOUPLED from a flat fraction of the primary: a long primary is
 // shrunk to fit its width, which under the old `EPITHET_RATIO * primaryH` starved a perfectly short
-// epithet below the legibility floor and dropped it (e.g. "Ghyrson Starn, Kelemorph"). Here we aim
-// for EPITHET_RATIO of the primary but hold EPITHET_H_MIN as a floor, width-fit the epithet's own
-// text (its band is availW * 0.92, matching pushText), and keep it subordinate via EPITHET_H_MAX /
-// EPITHET_MAX_RATIO. Returns 0 when no readable, subordinate line survives — the caller then drops
-// the epithet (its text is too wide, or the primary is itself too small to carry one).
+// epithet below the legibility floor and dropped it (a long primary with a one-word epithet). Here
+// we aim for EPITHET_RATIO of the primary but hold EPITHET_H_MIN as a floor, width-fit the
+// epithet's own text (its band is availW * 0.92, matching pushText), and keep it subordinate via
+// EPITHET_H_MAX / EPITHET_MAX_RATIO. Returns 0 when no readable, subordinate line survives — the
+// caller then drops the epithet (its text is too wide, or the primary is itself too small to carry
+// one).
 function epithetLineH(
   font: Font | null | undefined,
   text: string,
@@ -485,7 +609,16 @@ function epithetLineH(
 export function layoutLidArt(p: Params, cfg: LidArt, assets: LidArtAssets = {}): LidArtElement[] {
   if (!cfg.enabled) return [];
   const vz = visibleZone(p);
-  const hole = pullHole(p);
+  const cap = capSpec(p);
+  // The solid frame face carries the marque itself, in CAP-local coordinates (marquePanel);
+  // pullHole speaks lid-local, so shift it one rail-strip inboard to follow.
+  const onCap = cap != null && cap.window == null;
+  const lidHole = pullHole(p);
+  const hole =
+    lidHole && onCap ? { ...lidHole, cx: lidHole.cx - (dims(p).lidW - cap.w) / 2 } : lidHole;
+  // Piercing needs backing material: only the solid frame face may cut (the bare lid would open
+  // the card cavity, and the window face has no material under the marque zone at all).
+  const pierce = cfg.finish === "pierced" && onCap;
   const els: LidArtElement[] = [];
 
   const keep = hole ? { cx: hole.cx, cy: hole.cy, r: hole.r + HOLE_CLEAR } : null;
@@ -497,11 +630,13 @@ export function layoutLidArt(p: Params, cfg: LidArt, assets: LidArtAssets = {}):
 
   // --- border frame (double pinstripe) around the visible zone -------------------------------
   //
-  // Skipped entirely when the lid FRAME is on: its charred window edge replaces the pinstripes
-  // (a foil border inside the physical one would just double-frame the marque), and the window
-  // zone is already tight enough that the inset would cost real composition height.
-  const cap = capSpec(p);
-  const framed = cap != null;
+  // Skipped entirely when the lid FRAME's window is on: its charred window edge replaces the
+  // pinstripes (a foil border inside the physical one would just double-frame the marque), and
+  // the window zone is already tight enough that the inset would cost real composition height.
+  // The SOLID face has no window edge, so the border returns there — subject to the usual fit
+  // rules, which its front-hugging pull hole and scallop often fail together (then the marque
+  // simply runs borderless, like a cramped bare lid).
+  const framed = cap?.window != null;
   const fm = 1; // margin off the visible-zone edge
   const bo = { x0: vz.x0 + fm, y0: vz.y0 + fm, x1: vz.x1 - fm, y1: vz.y1 - fm };
   const bandA = 0.6;
@@ -552,7 +687,10 @@ export function layoutLidArt(p: Params, cfg: LidArt, assets: LidArtAssets = {}):
   // patch away OUTSIDE it and the frame ring glues wood-on-wood; what remains inside reads as a
   // gold pinstripe tracing the arch, cusps and scallop. It deliberately lives in the margin
   // between the window cut and the marque zone, so it is the one element allowed outside vz.
-  if (cap) {
+  // The trace is a foil-workflow, window-face artifact: the non-foil finishes have no foil to
+  // peel (the window's own charred edge already draws that line physically), and the solid face
+  // has no window cut to register against.
+  if (cap?.window && cfg.finish === "foil") {
     const xoff = (dims(p).lidW - cap.w) / 2;
     const outer: Ring = capWindowHole(cap).map(([x, y]) => [x + xoff, y]);
     const band = offsetRings([outer], -FRAME_TRACE_BAND);
@@ -699,7 +837,7 @@ export function layoutLidArt(p: Params, cfg: LidArt, assets: LidArtAssets = {}):
   if (plan) {
     let y = contentTop;
     if (plan.crown) {
-      pushCrown(els, cx, availW, { top: y, bot: y - crownH });
+      pushCrown(els, cx, availW, { top: y, bot: y - crownH }, pierce);
       y -= crownH + GAP;
     }
     const blockTop = y;
@@ -716,7 +854,7 @@ export function layoutLidArt(p: Params, cfg: LidArt, assets: LidArtAssets = {}):
       y -= epithetH;
     }
     y -= RULE_MARGIN;
-    pushRules(els, cx, availW, blockTop, y);
+    pushRules(els, cx, availW, blockTop, y, pierce);
 
     if (plan.orbit) {
       let positions = plan.orbit.positions;
@@ -731,6 +869,12 @@ export function layoutLidArt(p: Params, cfg: LidArt, assets: LidArtAssets = {}):
     }
   }
 
+  // The non-foil finishes are foil-free by sweep: "engraved" chars everything; "pierced" keeps
+  // its cut elements (crown, rules) and chars the rest — including the whole composition when the
+  // pierce was refused (no solid face), which degrades it to the engraved look.
+  if (cfg.finish !== "foil") {
+    return els.map((el) => (el.pass === "cut" ? el : { ...el, pass: "engrave" as const }));
+  }
   return els;
 }
 
@@ -739,16 +883,28 @@ function pushCrown(
   cx: number,
   availW: number,
   band: { top: number; bot: number },
+  pierce: boolean,
 ): void {
   const w = availW * 0.95;
   const h = band.top - band.bot;
-  els.push({
-    id: "crown",
-    pass: "foilGold",
-    paths: crownPaths(cx, band.bot, w, h),
-    fillRule: "nonzero",
-    bbox: { x0: cx - w / 2, y0: band.bot, x1: cx + w / 2, y1: band.top },
-  });
+  const paths = crownPaths(cx, band.bot, w, h);
+  const bbox: Bbox = { x0: cx - w / 2, y0: band.bot, x1: cx + w / 2, y1: band.top };
+  if (pierce) {
+    // The crown CUTS through the frame face: gem, ribbons and dots are solid island-free shapes,
+    // so only the openings themselves fall out. The dots overlap the ribbon tips though, and two
+    // overlapping closed paths would double-cut the crossing — union them into clean disjoint
+    // outlines first (flattened polylines; ~0.02 mm tolerance, far under the kerf).
+    const rings = unionRings(paths.flatMap((d) => flattenPathData(d, 0.02, undefined, 1, false)));
+    els.push({
+      id: "crown",
+      pass: "cut",
+      paths: [ringsToPath(rings, 0, 0)],
+      fillRule: "evenodd",
+      bbox,
+    });
+    return;
+  }
+  els.push({ id: "crown", pass: "foilGold", paths, fillRule: "nonzero", bbox });
 }
 
 // The arched primary name: arc.commands warped point-by-point onto the circle whose band-bottom
@@ -775,18 +931,21 @@ function pushArcName(els: LidArtElement[], cx: number, topY: number, arc: ArcNam
 
 // Two thin straight rules bracketing the whole name block (always present, even before the font
 // loads). The top rule sits RULE_MARGIN above the arch's apex, so only the text itself curves.
+// Pierced, they become slits cut clean through, thickened to PIERCE_RULE_W so the freed sliver
+// drops — still well inside RULE_MARGIN's air band.
 function pushRules(
   els: LidArtElement[],
   cx: number,
   availW: number,
   blockTop: number,
   blockBottom: number,
+  pierce: boolean,
 ): void {
   const ruleW = availW * 0.86;
-  const rt = MIN_FOIL;
+  const rt = pierce ? PIERCE_RULE_W : MIN_FOIL;
   els.push({
     id: "name-rules",
-    pass: "foilGold",
+    pass: pierce ? "cut" : "foilGold",
     paths: [
       rectPath(cx - ruleW / 2, blockTop - rt, cx + ruleW / 2, blockTop),
       rectPath(cx - ruleW / 2, blockBottom, cx + ruleW / 2, blockBottom + rt),
@@ -832,10 +991,13 @@ function pushText(
   });
 }
 
-// The mana coins. Single mode: the healed knockout coin (one even-odd foil element). Multi mode: a
-// solid gold disc on the foil layer plus the glyph on the dark-engrave layer inside it. A symbol
-// whose glyph was never fetched degrades to a plain disc (a data gap, not a downgrade policy — the
-// glyph ships whenever it exists).
+// The mana coins. Foil single mode: the healed knockout coin (one even-odd foil element). Foil
+// multi mode: a solid gold disc on the foil layer plus the glyph on the dark-engrave layer inside
+// it. Engraved AND pierced finishes: a thin engraved ring with the glyph engraved dark inside it
+// (both on the engrave layer — the finish sweep at the end of layoutLidArt is a no-op for them);
+// coins never pierce, since a cut ring drops its centre disc on the floor and most glyphs carry
+// island counters of their own. A symbol whose glyph was never fetched degrades to a plain disc /
+// bare ring (a data gap, not a downgrade policy — the glyph ships whenever it exists).
 function pushPips(
   els: LidArtElement[],
   cfg: LidArt,
@@ -847,6 +1009,29 @@ function pushPips(
     const q = positions[i]!;
     const glyph = cfg.symbolPaths[code];
     const bbox: Bbox = { x0: q.x - pipR, y0: q.y - pipR, x1: q.x + pipR, y1: q.y + pipR };
+    if (cfg.finish !== "foil") {
+      els.push({
+        id: `pip-${i}`,
+        pass: "engrave",
+        paths: [discPath(q.x, q.y, pipR), discPath(q.x, q.y, pipR - ENGRAVE_RING_W)],
+        fillRule: "evenodd",
+        bbox,
+      });
+      const glyphD = pipD - 2 * (ENGRAVE_RING_W + ENGRAVE_RING_GAP);
+      if (glyph && glyphD >= ENGRAVE_GLYPH_MIN_D) {
+        const coin = healedCoin(glyph, glyphD);
+        if (coin.glyph.length > 0) {
+          els.push({
+            id: `pip-${i}-glyph`,
+            pass: "engrave",
+            paths: [ringsToPath(coin.glyph, q.x, q.y)],
+            fillRule: "evenodd",
+            bbox,
+          });
+        }
+      }
+      return;
+    }
     if (!glyph) {
       els.push({
         id: `pip-${i}`,

@@ -104,8 +104,8 @@ describe("healCoin on a pathological synthetic glyph", () => {
   // 0.25 units from its wall... simplest: a thin ring gap leaves a foil island inside it.
   const SLOT = "M20 48L80 48L80 48.5L20 48.5Z"; // hairline knockout slot
   const RING_GAP =
-    "M30 60L70 60L70 80L30 80ZM30.5 60.5L69.5 60.5L69.5 79.5L30.5 79.5Z" /* 0.5-unit-wide void ring
-      -> encloses a 39×19-unit foil island connected to nothing */;
+    "M30 60L70 60L70 80L30 80ZM30.5 60.5L69.5 60.5L69.5 79.5L30.5 79.5Z"; /* 0.5-unit-wide void ring
+      -> encloses a 39×19-unit foil island connected to nothing */
   const GLYPH = SLOT + RING_GAP;
 
   test("no gap or island narrower than the floor survives healing (10 mm coin)", () => {

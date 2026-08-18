@@ -4,32 +4,34 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vite-plus/test";
-import { DEFAULT_LID_ART, type LidArt, layoutLidArt, type PassMode } from "./lidart.ts";
+import { DEFAULT_LID_ART, type LidArt, layoutLidArt } from "./lidart.ts";
 import { panels } from "./panels.ts";
 import { defaults, type Params } from "./params.ts";
-import { filenameStem, layout, type LidArtSheet, sheetSvg, totalPanelArea } from "./svg.ts";
+import { layoutSideArt } from "./sideart.ts";
+import { filenameStem, layout, type SheetArt, sheetSvg, totalPanelArea } from "./svg.ts";
 
 const SYMBOLS = JSON.parse(
   readFileSync(fileURLToPath(new URL("./assets/mana-symbols.json", import.meta.url)), "utf8"),
 ) as Record<string, string>;
 
-// Marque elements for the default lid, no font (name glyphs omitted; crown/border/rules and the
-// mana coins all present, which is enough to exercise every pass -> layer mapping).
-function artSheet(mode: PassMode): LidArtSheet {
-  const cfg: LidArt = {
+// Art config for the default box, no font (name glyphs omitted; crown/border/rules and the mana
+// coins all present, which is enough to exercise every pass -> layer mapping).
+function artCfg(over: Partial<LidArt> = {}): LidArt {
+  return {
     ...DEFAULT_LID_ART,
     enabled: true,
     name: "Test, of the Layers",
     pips: ["W", "U", "B", "G"],
     symbolPaths: SYMBOLS,
-    passMode: mode,
+    ...over,
   };
-  return { elements: layoutLidArt(defaults, cfg, {}), mode };
 }
 
-function lidSvg(mode: PassMode | null): string {
+function lidSvg(over: Partial<LidArt> | null): string {
   const sheet = layout(defaults).sheets[0]!;
-  return mode ? sheetSvg(sheet, defaults, artSheet(mode)) : sheetSvg(sheet, defaults);
+  if (!over) return sheetSvg(sheet, defaults);
+  const art: SheetArt = { marque: layoutLidArt(defaults, artCfg(over), {}) };
+  return sheetSvg(sheet, defaults, art);
 }
 
 describe("layout", () => {
@@ -149,7 +151,7 @@ describe("sheetSvg", () => {
 
 describe("lid marque layers", () => {
   test("single mode: one foil layer (blue) plus the red cut — never black or magenta", () => {
-    const svg = lidSvg("single");
+    const svg = lidSvg({ passMode: "single" });
     expect(svg).toContain("#0000ff");
     expect(svg).not.toContain("#000000");
     expect(svg).not.toContain("#ff00ff");
@@ -157,12 +159,24 @@ describe("lid marque layers", () => {
   });
 
   test("multi mode: gold foil (blue) and engraved coin glyphs (black) — never magenta", () => {
-    const svg = lidSvg("multi");
+    const svg = lidSvg({ passMode: "multi" });
     expect(svg).toContain("#0000ff"); // gold foil
     expect(svg).not.toContain("#ff00ff"); // no holo stamp ring any more
     expect(svg).toContain("#000000"); // coin glyphs on the dark-engrave layer
     expect(svg).toContain('id="marque-pip-0-glyph"');
     expect(svg).toContain("#ff0000"); // cut
+  });
+
+  test("engraved finish: a single dark-engrave layer — no foil blue anywhere", () => {
+    const svg = lidSvg({ finish: "engraved" });
+    expect(svg).toContain("#000000");
+    expect(svg).not.toContain("#0000ff");
+    expect(svg).toContain("#ff0000"); // cut unchanged
+    // Ring-and-glyph coins: both on the engrave layer.
+    expect(svg).toContain('id="marque-pip-0"');
+    expect(svg).toContain('id="marque-pip-0-glyph"');
+    // No foil glue-peel trace — it has no job without foil.
+    expect(svg).not.toContain("marque-frame-trace");
   });
 
   test("disabled: no marque layers at all, only the red cut", () => {
@@ -178,7 +192,7 @@ describe("lid marque layers", () => {
   });
 
   test("the mana coins are healed knockout paths on the foil layer in single mode", () => {
-    const svg = lidSvg("single");
+    const svg = lidSvg({ passMode: "single" });
     const pip = svg.match(/<path id="marque-pip-0" d="([^"]+)" fill="([^"]+)"/);
     expect(pip).not.toBeNull();
     expect(pip![2]).toBe("#0000ff");
@@ -189,11 +203,88 @@ describe("lid marque layers", () => {
   test("the marque only touches the lid — other panels' cut paths are unchanged", () => {
     const sheet = layout(defaults).sheets[0]!;
     const plain = sheetSvg(sheet, defaults);
-    const withArt = sheetSvg(sheet, defaults, artSheet("multi"));
+    const withArt = sheetSvg(sheet, defaults, {
+      marque: layoutLidArt(defaults, artCfg({ passMode: "multi" }), {}),
+    });
     for (const id of ["body-front", "body-back", "side-left-inner", "body-floor"]) {
       const re = new RegExp(`<path id="${id}"[^>]*>`);
       expect(withArt.match(re)![0]).toBe(plain.match(re)![0]);
     }
+  });
+});
+
+describe("solid frame face + pierced finish", () => {
+  const p: Params = { ...defaults, capFace: "solid" };
+
+  test("the frame carries the marque, so IT pins to sheet 1's bottom-left corner", () => {
+    const l = layout(p);
+    const cap = l.sheets[0]!.placements.find((pl) => pl.panel.id === "lid-cap");
+    expect(cap).toBeDefined();
+    expect(cap!.x).toBeCloseTo(p.partGap, 9);
+    expect(cap!.y).toBeCloseTo(p.sheetH - p.partGap - cap!.panel.size[1], 9);
+  });
+
+  test("the marque overlay rides the lid-cap placement", () => {
+    const sheet = layout(p).sheets[0]!;
+    const svg = sheetSvg(sheet, p, {
+      marque: layoutLidArt(p, artCfg({ finish: "engraved" }), {}),
+    });
+    const pl = sheet.placements.find((q) => q.panel.id === "lid-cap")!;
+    const m = svg.match(
+      /<g transform="translate\(([\d.]+) ([\d.]+)\) scale\(1 -1\)">\n\s+<path id="marque-/,
+    );
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeCloseTo(pl.x, 3);
+    expect(Number(m![2])).toBeCloseTo(pl.y + pl.panel.size[1], 3);
+  });
+
+  test("pierced: marque cutouts land red on the cut layer, char stays black, no foil blue", () => {
+    const sheet = layout(p).sheets[0]!;
+    const svg = sheetSvg(sheet, p, {
+      marque: layoutLidArt(p, artCfg({ finish: "pierced" }), {}),
+    });
+    const crown = svg.match(/<path id="marque-crown"[^>]*fill="([^"]+)"/)!;
+    expect(crown[1]).toBe("#ff0000");
+    const rules = svg.match(/<path id="marque-name-rules"[^>]*fill="([^"]+)"/)!;
+    expect(rules[1]).toBe("#ff0000");
+    expect(svg).toContain("#000000"); // the engraved remainder (coins, border…)
+    expect(svg).not.toContain("#0000ff");
+  });
+});
+
+describe("wall engraving layers", () => {
+  const walls = layoutSideArt(defaults, artCfg({ sides: "seigaiha" }));
+  const sheet = layout(defaults).sheets[0]!;
+  const svg = sheetSvg(sheet, defaults, { walls });
+
+  test("all four decorated walls land their overlays, id-prefixed by panel", () => {
+    for (const id of ["body-front", "side-right-outer", "body-back", "side-left-outer"]) {
+      expect(svg).toContain(`id="${id}-border"`);
+      expect(svg).toContain(`id="${id}-pattern"`);
+    }
+  });
+
+  test("wall art is engrave-only: black fills, no foil blue", () => {
+    expect(svg).toContain("#000000");
+    expect(svg).not.toContain("#0000ff");
+    expect(svg).toContain("#ff0000"); // cut unchanged
+  });
+
+  test("overlays never touch the cut paths — every panel's outline is byte-identical", () => {
+    const plain = sheetSvg(sheet, defaults);
+    for (const pl of sheet.placements) {
+      const re = new RegExp(`<path id="${pl.panel.id}"[^>]*>`);
+      expect(svg.match(re)![0]).toBe(plain.match(re)![0]);
+    }
+  });
+
+  test("lid marque and wall art compose on one sheet", () => {
+    const both = sheetSvg(sheet, defaults, {
+      marque: layoutLidArt(defaults, artCfg({ finish: "engraved" }), {}),
+      walls,
+    });
+    expect(both).toContain('id="marque-crown"');
+    expect(both).toContain('id="body-front-border"');
   });
 });
 

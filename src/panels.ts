@@ -20,10 +20,14 @@
 // back wall, and the relief shoulders sit lidFit short of the bridge faces, never bottoming first.
 //
 // Blanks: front and back walls span the full outerW and joint with 2t-deep fingers that pass
-// through BOTH side layers (A-phase: material first). Both side layers of a side are identical
-// parts (B-phase, t-deep combs); their front-edge comb only spans the front wall's height (slotZ),
-// their back-edge comb the full wallH. The floor spans the cavity plus tabs that pass fully through
-// the walls — t deep into front/back, 2t through the side sandwiches — finishing flush outside.
+// through BOTH side layers (A-phase: material first). The side layers share one silhouette
+// (B-phase, t-deep combs); their front-edge comb only spans the front wall's height (slotZ),
+// their back-edge comb the full wallH. The LEFT OUTER layer is drawn as that silhouette's MIRROR
+// image so its outward face is the sheet's engraved top face — see the note in panels() — which
+// costs nothing when plain (flip the cut part over and it IS the canonical layer) and is what
+// lets the wall engravings (sideart.ts) run face-up on every decorated panel. The floor spans the
+// cavity plus tabs that pass fully through the walls — t deep into front/back, 2t through the side
+// sandwiches — finishing flush outside.
 //
 // The LID FRAME is a ninth, joint-free panel glued onto the lid's top face: a picture frame whose
 // window recesses the foil marque one thickness deep behind a charred (laser-cut) border — the
@@ -33,7 +37,13 @@
 // combs, no corner reliefs. The window itself is ornamented (all free cuts): a LEGENDARY CROWN
 // ARCH risen from its back edge, CATHEDRAL CUSPS in its corners, and the half-ellipse thumb
 // scallop in its front edge — which is the new pull: a thumb drops into the window, catches the
-// front edge and drags the lid open.
+// front edge and drags the lid open. That whole window story is the frame's "window" FACE
+// (capFace); the alternative SOLID face cuts no window at all — the marque rides the frame's top
+// face instead (lidart.ts) — so the pull moves: the lid pull hole passes through frame and lid as
+// one aligned finger hole, and/or the thumb scallop becomes a THUMB WELL cut through the frame
+// just behind its front edge. The well's FLAT front wall is the bar a thumb hooks to drag the
+// lid forward (the lid opens toward you, so an open-front notch would give the thumb nothing to
+// pull against); behind the bar the well floor is the lid's own top face, one thickness down.
 //
 // The front and/or back wall can carry a THUMB NOTCH: a U-shaped scallop dipped into the top edge,
 // centred and clear of the side joints, so a thumb reaches in to drag the top card up — exposing
@@ -302,15 +312,17 @@ function lidOutline(
 // only a corner-diagonal inset (cusp/√2) for the cusps (see lidart's CAP_ART_MARGIN use).
 
 export type CapWindow = { x0: number; y0: number; x1: number; y1: number };
-export type CapScallop = { cx: number; halfW: number; depth: number }; // half-ellipse into the front rail
+export type CapScallop = { cx: number; halfW: number; depth: number }; // half-ellipse dip (see CapSpec.window)
 export type CapArch = { halfW: number; plateau: number; h: number; tip: number }; // centred on w/2
 export type CapSpec = {
   w: number;
   l: number;
-  window: CapWindow;
+  window: CapWindow | null; // null -> the SOLID face: no window cutout, the marque rides on top
+  // Window face: the dip into the front rail. Solid face: the thumb WELL, whose depth excludes the
+  // solidScallopLig front bar in front of it.
   scallop: CapScallop | null;
-  arch: CapArch | null; // null -> straight back edge
-  cusp: number; // corner cusp radius; 0 -> plain rounded corners (CAP.windowR)
+  arch: CapArch | null; // null -> straight back edge (always null on the solid face)
+  cusp: number; // corner cusp radius; 0 -> plain rounded corners (CAP.windowR); 0 on the solid face
 };
 
 // The crown arch's proportions, of the window width / of its own height. The peak rises
@@ -322,9 +334,24 @@ const ARCH_TIP = 0.18; // centre-tip rise as a fraction of the total arch height
 // Null when the frame is off or dims() dropped it (window below CAP.minWindow). Every ornament
 // degrades independently: too skinny a rail and the scallop, arch or cusps quietly disappear —
 // the plain window edge still works as the pull, just without the widened thumb landing.
+//
+// The SOLID face (capFace) skips the window and every window ornament: its only ornament is the
+// optional THUMB WELL — the scallop's half-ellipse cut clean through the frame just behind the
+// front edge, spanning y ∈ [solidScallopLig, solidScallopLig + depth], flat chord forward (see
+// solidScallopHole; pullHole is the through-hole alternative). Its depth gets its own cap
+// (CAP.solidScallopMax) so the marque zone above it keeps its room.
 export function capSpec(p: Params): CapSpec | null {
   const d = dims(p);
   if (d.capW <= 0) return null;
+  if (p.capFace === "solid") {
+    let scallop: CapScallop | null = null;
+    if (p.capScallop > 0) {
+      const halfW = Math.min(p.capScallop, d.capW - 16) / 2;
+      const depth = Math.min(halfW, CAP.solidScallopMax);
+      if (halfW >= 3 && depth >= 1.2) scallop = { cx: d.capW / 2, halfW, depth };
+    }
+    return { w: d.capW, l: d.capL, window: null, scallop, arch: null, cusp: 0 };
+  }
   const rail = p.capRail;
   const window: CapWindow = { x0: rail, y0: rail, x1: d.capW - rail, y1: d.capL - rail };
   const rise = rail - CAP.scallopLig; // room above/below the window edges, ligament kept
@@ -360,6 +387,7 @@ const WING_SEGS = 12;
 // as the frame's glue-peel guide — one source, so the trace can never drift from the real cut.
 export function capWindowHole(spec: CapSpec): Pt[] {
   const { window: win, scallop, arch, cusp } = spec;
+  if (!win) throw new Error("capWindowHole: the solid frame face has no window");
   const { x0, y0, x1, y1 } = win;
   const cx = spec.w / 2;
   const r = cusp > 0 ? cusp : Math.max(0, Math.min(CAP.windowR, (x1 - x0) / 2, (y1 - y0) / 2));
@@ -421,6 +449,22 @@ export function capWindowHole(spec: CapSpec): Pt[] {
   return dedupe(pts.reverse());
 }
 
+// The solid face's THUMB WELL: the scallop's half-ellipse cut clean through the frame just
+// behind its front edge. The FLAT chord faces forward — a straight pull bar backed by
+// CAP.solidScallopLig of frame material laminated full-face to the lid — and the curve arcs
+// backward; a thumb drops in, presses the bar and drags the lid open toward you. Walking the
+// curve left → apex → right and closing along the chord winds CW, as every panel hole must.
+// Like the window it is a standalone cutout, drawn nominal.
+export function solidScallopHole(s: CapScallop): Pt[] {
+  const y0 = CAP.solidScallopLig;
+  const pts: Pt[] = [];
+  for (let i = 0; i <= 24; i++) {
+    const th = (Math.PI * i) / 24;
+    pts.push([s.cx - s.halfW * Math.cos(th), y0 + s.depth * Math.sin(th)]);
+  }
+  return dedupe(pts);
+}
+
 export type PullHole = { cx: number; cy: number; r: number };
 
 // The lid pull hole in lid-local mm (origin at the lid blank's min corner, y up). Null when the
@@ -428,15 +472,25 @@ export type PullHole = { cx: number; cy: number; r: number };
 // panel geometry below AND the lid-art layout (lidart.ts) both read it, so the engraved marque can
 // never drift into the real cut. Kept in step with the lid blank via dims(): the hole sits centred
 // across the width, one radius + 4 mm up from the front edge (min 14 mm so a fingertip clears).
-// With the lid frame on it also rides above the window's front rail (frame and lid share y = 0),
-// so the peek hole stays fully visible inside the window instead of hiding under the frame.
+// With the lid frame's WINDOW face on it also rides above the window's front rail (frame and lid
+// share y = 0), so the peek hole stays fully visible inside the window instead of hiding under
+// the frame. With the SOLID face the hole pierces frame AND lid as one aligned finger hole — the
+// solid face's replacement pull — so the narrower frame clamps its size too, and it rides above
+// the thumb well so the two openings never merge.
 export function pullHole(p: Params): PullHole | null {
   const d = dims(p);
-  const pull = Math.min(p.lidPull, d.lidW - 8, d.lidL - 8);
-  if (pull < 4) return null;
   const cap = capSpec(p);
-  const cy = Math.max(pull / 2 + 4, 14, cap ? cap.window.y0 + 1 + pull / 2 : 0);
-  if (cy + pull / 2 > d.lidL - 3) return null; // the frame pushed it off the lid: skip the hole
+  const solid = cap != null && cap.window == null;
+  const pull = Math.min(p.lidPull, d.lidW - 8, d.lidL - 8, solid ? cap.w - 8 : Infinity);
+  if (pull < 4) return null;
+  const cy = Math.max(
+    pull / 2 + 4,
+    14,
+    cap?.window ? cap.window.y0 + 1 + pull / 2 : 0,
+    solid && cap.scallop ? CAP.solidScallopLig + cap.scallop.depth + pull / 2 + 2 : 0,
+  );
+  // The frame pushed it off the lid (or, solid, off the shallower frame blank): skip the hole.
+  if (cy + pull / 2 > (solid ? cap.l : d.lidL) - 3) return null;
   return { cx: d.lidW / 2, cy, r: pull / 2 };
 }
 
@@ -532,10 +586,26 @@ export function panels(p: Params): Panel[] {
       ? { ...notch, depth: notch.depth + (d.wallH - d.slotZ) }
       : undefined;
 
+  // The LEFT OUTER layer is drawn MIRRORED (u ↦ outerD − u, order reversed to stay CCW). Why:
+  // every decorated panel must present the sheet's engraved TOP face on the box's OUTSIDE, and
+  // the canonical left-outer orientation shows its bottom face to the world. Its outline is the
+  // one asymmetric wall silhouette (short front comb vs. full-height back comb), so unlike the
+  // back wall it can't simply be flipped at assembly — the drawing itself mirrors instead, and
+  // flipping the cut part over turns it into exactly the classic canonical layer with the
+  // engraved face landing outward (the comb phase only fits that one way, so the part self-jigs).
+  // The place is the compensating rigid motion for that flip: local (u, v, w) → world
+  // (t − w, outerD − u, v), which occupies the identical [0,t]×[0,outerD]×[0,wallH] slab.
+  const leftOuterBase = sideLayer("side-left-outer", 0, false);
+  const leftOuter: Panel = {
+    ...leftOuterBase,
+    outline: dedupe(leftOuterBase.outline.map(([x, y]): Pt => [d.outerD - x, y]).reverse()),
+    place: { pos: [t, d.outerD, 0], rot: [HALF_PI, 0, -HALF_PI] },
+  };
+
   return [
     wideWall("body-front", d.slotZ, t, frontNotch),
     wideWall("body-back", d.wallH, d.outerD, backNotch),
-    sideLayer("side-left-outer", 0, false),
+    leftOuter,
     sideLayer("side-left-inner", t, true),
     sideLayer("side-right-inner", d.outerW - 2 * t, true),
     sideLayer("side-right-outer", d.outerW - t, false),
@@ -555,7 +625,10 @@ export function panels(p: Params): Panel[] {
     },
     // The lid frame laminates onto the lid's top face, centred in the recess between the rail
     // strips, front edges flush — with the frame-shrunk rail strip its own top face meets the
-    // wall tops exactly (slotZ + 2t = wallH).
+    // wall tops exactly (slotZ + 2t = wallH). The blank is a plain rectangle either way; the
+    // window face cuts its ornamented window, the solid face instead cuts the thumb well and
+    // passes the pull hole through (aligned with the lid's — same y, one rail-strip inboard in x)
+    // so one finger reaches through both layers.
     ...(cap
       ? [
           {
@@ -566,7 +639,12 @@ export function panels(p: Params): Panel[] {
               [cap.w, cap.l],
               [0, cap.l],
             ] as Pt[],
-            holes: [capWindowHole(cap)],
+            holes: cap.window
+              ? [capWindowHole(cap)]
+              : [
+                  ...(cap.scallop ? [solidScallopHole(cap.scallop)] : []),
+                  ...(hole ? [circleCW(hole.cx - (d.lidW - cap.w) / 2, hole.cy, hole.r)] : []),
+                ],
             size: [cap.w, cap.l] as [number, number],
             place: {
               pos: [(d.outerW - cap.w) / 2, 0, d.slotZ + t] as [number, number, number],

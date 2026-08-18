@@ -15,10 +15,11 @@ import {
   type Panel,
   panels,
   placeMatrix,
+  type Pt,
   pullHole,
   thumbNotch,
 } from "./panels.ts";
-import { defaults, dims, type Params } from "./params.ts";
+import { CAP, defaults, dims, type Params } from "./params.ts";
 
 const d = dims(defaults);
 const t = defaults.thickness;
@@ -102,7 +103,7 @@ describe("outlines", () => {
     const p0 = { ...defaults, kerf: 0 };
     const front = panel("body-front", p0);
     const sideIn = panel("side-left-inner", p0);
-    const sideOut = panel("side-left-outer", p0);
+    const sideOut = panel("side-right-outer", p0); // canonical orientation (left outer is mirrored)
     const n = fingerCount(d.slotZ, defaults.fingerWidth);
     const seg = d.slotZ / n;
     // Segment 0 (bottom): wide-wall finger, both side layers recessed at their front edge.
@@ -113,6 +114,32 @@ describe("outlines", () => {
     expect(inPoly(front.outline, t, 1.5 * seg)).toBe(false);
     expect(inPoly(sideIn.outline, t / 2, 1.5 * seg)).toBe(true);
     expect(inPoly(sideOut.outline, t / 2, 1.5 * seg)).toBe(true);
+  });
+
+  test("side-left-outer is the right outer's mirror image, placed to occupy the same slab", () => {
+    const p0 = { ...defaults, kerf: 0.2 }; // kerf on: the mirror must hold for compensated combs too
+    const left = panel("side-left-outer", p0);
+    const right = panel("side-right-outer", p0);
+    // Point-for-point mirror (u ↦ outerD − u, traversal reversed to stay CCW).
+    expect(left.outline.length).toBe(right.outline.length);
+    const mirrored = right.outline.map(([x, y]) => [d.outerD - x, y]).reverse();
+    // dedupe() may rotate the start point; compare as ordered cycles.
+    const key = (x: number, y: number) => `${x.toFixed(6)},${y.toFixed(6)}`;
+    const cycle = mirrored.map(([x, y]) => key(x!, y!));
+    const start = cycle.indexOf(key(left.outline[0]![0], left.outline[0]![1]));
+    expect(start).toBeGreaterThanOrEqual(0);
+    left.outline.forEach(([x, y], i) => {
+      expect(key(x, y)).toBe(cycle[(start + i) % cycle.length]);
+    });
+    // Its FRONT comb now rides the drawn RIGHT edge (u = outerD): recessed at the bottom segment.
+    const seg = d.slotZ / fingerCount(d.slotZ, defaults.fingerWidth);
+    expect(inPoly(panel("side-left-outer").outline, d.outerD - t / 2, seg / 2)).toBe(false);
+    // The compensating place flips it back: drawn (outerD, 0, t) — front-bottom, engraved face —
+    // lands at the world origin's front-left corner with the engraving on the outside (x = 0).
+    const flipped = applyPlace([d.outerD, 0, t], panel("side-left-outer").place);
+    [0, 0, 0].forEach((v, i) => expect(flipped[i]).toBeCloseTo(v, 9));
+    const origin = applyPlace([0, 0, 0], panel("side-left-outer").place);
+    [t, d.outerD, 0].forEach((v, i) => expect(origin[i]).toBeCloseTo(v, 9));
   });
 
   test("the groove: open at the front, stopped at a back ligament; outer layers solid", () => {
@@ -292,6 +319,7 @@ describe("thumb notch", () => {
 
 describe("lid frame", () => {
   const cap = capSpec(defaults)!;
+  const win = cap.window!;
   const frame = panel("lid-cap");
   const hole = frame.holes[0]!;
   // Material at (x, y) in cap-local mm: inside the blank and not inside the window cutout.
@@ -333,28 +361,28 @@ describe("lid frame", () => {
 
   test("thumb scallop: void dipped into the front rail, material either side of it", () => {
     const s = cap.scallop!;
-    expect(material(s.cx, cap.window.y0 - s.depth / 2)).toBe(false); // inside the dip
-    expect(material(s.cx - s.halfW - 2, cap.window.y0 - s.depth / 2)).toBe(true);
-    expect(material(s.cx + s.halfW + 2, cap.window.y0 - s.depth / 2)).toBe(true);
+    expect(material(s.cx, win.y0 - s.depth / 2)).toBe(false); // inside the dip
+    expect(material(s.cx - s.halfW - 2, win.y0 - s.depth / 2)).toBe(true);
+    expect(material(s.cx + s.halfW + 2, win.y0 - s.depth / 2)).toBe(true);
     // The dip keeps the CAP.scallopLig ligament: void just above it, material just below.
-    expect(material(s.cx, cap.window.y0 - s.depth + 0.3)).toBe(false);
-    expect(material(s.cx, cap.window.y0 - s.depth - 0.3)).toBe(true);
+    expect(material(s.cx, win.y0 - s.depth + 0.3)).toBe(false);
+    expect(material(s.cx, win.y0 - s.depth - 0.3)).toBe(true);
   });
 
   test("crown arch: void risen into the back rail at the centre, straight edge at the flanks", () => {
     const a = cap.arch!;
     const cx = cap.w / 2;
-    expect(material(cx, cap.window.y1 + 1)).toBe(false); // under the peak
-    expect(material(cx, cap.window.y1 + a.h + a.tip + 0.3)).toBe(true); // over the peak
-    expect(material(cx + a.halfW + 2, cap.window.y1 + 0.5)).toBe(true); // beyond the wings
-    expect(material(cx - a.halfW - 2, cap.window.y1 + 0.5)).toBe(true);
+    expect(material(cx, win.y1 + 1)).toBe(false); // under the peak
+    expect(material(cx, win.y1 + a.h + a.tip + 0.3)).toBe(true); // over the peak
+    expect(material(cx + a.halfW + 2, win.y1 + 0.5)).toBe(true); // beyond the wings
+    expect(material(cx - a.halfW - 2, win.y1 + 0.5)).toBe(true);
     // The wing is concave: halfway out, the void has risen far less than half the arch height.
     const midX = cx + (a.plateau + a.halfW) / 2;
-    expect(material(midX, cap.window.y1 + a.h * 0.45)).toBe(true);
+    expect(material(midX, win.y1 + a.h * 0.45)).toBe(true);
   });
 
   test("cathedral cusps: frame material points into the window at each square corner", () => {
-    const { x0, y0, x1, y1 } = cap.window;
+    const { x0, y0, x1, y1 } = win;
     for (const [qx, qy] of [
       [x0, y0],
       [x1, y0],
@@ -392,6 +420,92 @@ describe("lid frame", () => {
     const tiny = { ...defaults, cardCount: 40, capRail: 12 };
     expect(capSpec(tiny)).toBeNull();
     expect(dims(tiny).railStrip).toBeCloseTo(Math.max(1.5 * t, 5), 9);
+  });
+});
+
+describe("solid frame face", () => {
+  const p: Params = { ...defaults, capFace: "solid" };
+  const cap = capSpec(p)!;
+  const frame = panel("lid-cap", p);
+  const lidHole = pullHole(p)!;
+  const holeW = (ring: Pt[]) => {
+    const xs = ring.map(([x]) => x);
+    return Math.max(...xs) - Math.min(...xs);
+  };
+  // Two cutouts, told apart by width: the thumb well (2·halfW) and the pull hole (2·r).
+  const well = frame.holes.find((h) => Math.abs(holeW(h) - 2 * cap.scallop!.halfW) < 1e-6)!;
+  const pull = frame.holes.find((h) => Math.abs(holeW(h) - 2 * lidHole.r) < 0.01)!;
+  // Material at (x, y): inside the blank, outside every cutout.
+  const material = (x: number, y: number) =>
+    inPoly(frame.outline, x, y) && frame.holes.every((h) => !inPoly(h, x, y));
+
+  test("spec: no window, arch or cusps; the thumb well's depth is capped", () => {
+    expect(cap.window).toBeNull();
+    expect(cap.arch).toBeNull();
+    expect(cap.cusp).toBe(0);
+    const s = cap.scallop!;
+    expect(s.cx).toBeCloseTo(cap.w / 2, 9);
+    expect(s.depth).toBeLessThanOrEqual(CAP.solidScallopMax);
+    expect(s.depth).toBeLessThanOrEqual(s.halfW);
+  });
+
+  test("a plain rectangular blank with two CW cutouts strictly inside it", () => {
+    expect(frame.outline.length).toBe(4);
+    expect(frame.holes.length).toBe(2);
+    expect(well).toBeDefined();
+    expect(pull).toBeDefined();
+    for (const h of frame.holes) {
+      expect(signedArea(h)).toBeLessThan(0); // holes wind CW
+      for (const [x, y] of h) {
+        expect(x).toBeGreaterThan(0);
+        expect(x).toBeLessThan(cap.w);
+        expect(y).toBeGreaterThan(0);
+        expect(y).toBeLessThan(cap.l);
+      }
+    }
+  });
+
+  test("the thumb well sits behind a solid front pull bar — the edge a thumb pulls against", () => {
+    const s = cap.scallop!;
+    const midY = CAP.solidScallopLig + s.depth / 2;
+    expect(material(s.cx, midY)).toBe(false); // the well void
+    expect(material(s.cx, CAP.solidScallopLig / 2)).toBe(true); // the pull bar in front of it
+    expect(material(s.cx - s.halfW - 2, midY)).toBe(true); // shoulders beside it
+    expect(material(s.cx + s.halfW + 2, midY)).toBe(true);
+    expect(material(s.cx, CAP.solidScallopLig + s.depth + 1)).toBe(true); // material behind it
+  });
+
+  test("the pull hole pierces frame and lid at the same world spot, same radius", () => {
+    const xs = pull.map(([x]) => x);
+    const ys = pull.map(([, y]) => y);
+    const ccx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const ccy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const capWorld = applyPlace([ccx, ccy, 0], frame.place);
+    const lidWorld = applyPlace([lidHole.cx, lidHole.cy, 0], panel("lid", p).place);
+    expect(capWorld[0]).toBeCloseTo(lidWorld[0]!, 6);
+    expect(capWorld[1]).toBeCloseTo(lidWorld[1]!, 6);
+    expect((Math.max(...xs) - Math.min(...xs)) / 2).toBeCloseTo(lidHole.r, 6);
+  });
+
+  test("the hole rides above the thumb well so the two openings never merge", () => {
+    expect(lidHole.cy - lidHole.r).toBeGreaterThanOrEqual(
+      CAP.solidScallopLig + cap.scallop!.depth + 2 - 1e-9,
+    );
+  });
+
+  test("both pulls are optional, each leaving its lone cutout — or none at all", () => {
+    expect(panel("lid-cap", { ...p, lidPull: 0 }).holes.length).toBe(1); // well only
+    expect(panel("lid-cap", { ...p, capScallop: 0 }).holes.length).toBe(1); // pull hole only
+    const bare = panel("lid-cap", { ...p, lidPull: 0, capScallop: 0 });
+    expect(bare.holes.length).toBe(0);
+    expect(bare.outline.length).toBe(4);
+  });
+
+  test("waived window rule: a box too small for the window still carries a solid face", () => {
+    const tiny: Params = { ...defaults, cardCount: 40, capRail: 12, capFace: "solid" };
+    expect(capSpec({ ...tiny, capFace: "window" })).toBeNull(); // the window face drops this frame
+    expect(capSpec(tiny)!.window).toBeNull();
+    expect(panels(tiny).map((q) => q.id)).toContain("lid-cap");
   });
 });
 

@@ -296,7 +296,7 @@
       <div id="controls"></div>
 
       <details class="group" id="lidart">
-        <summary><h2>Lid foil marque</h2></summary>
+        <summary><h2>Marque &amp; engraving</h2></summary>
         <label class="toggle">
           <input type="checkbox" id="laEnable" /> Engrave a commander marque
         </label>
@@ -305,7 +305,7 @@
             <input
               type="text"
               id="laName"
-              placeholder="Commander name (e.g. Atraxa)"
+              placeholder="Commander name"
               role="combobox"
               aria-autocomplete="list"
               aria-expanded="false"
@@ -318,6 +318,14 @@
           <button id="laLookup" type="button">Look up</button>
         </div>
         <label class="sel"
+          >Lid finish
+          <select id="laFinish">
+            <option value="foil">Gold foil</option>
+            <option value="engraved">Engraved (all wood)</option>
+            <option value="pierced">Pierced (fretwork, solid frame face)</option>
+          </select>
+        </label>
+        <label class="sel" id="laModeRow"
           >Foil workflow
           <select id="laMode">
             <option value="single">Single-pass patch</option>
@@ -326,6 +334,38 @@
         </label>
         <label class="toggle">
           <input type="checkbox" id="laUniform" /> Uniform coin size (mono matches 5-colour)
+        </label>
+        <label class="sel"
+          >Side pattern
+          <select id="laSides">
+            <option value="none">None</option>
+            <option value="lattice">Diamond lattice</option>
+            <option value="chevron">Chevron parquet</option>
+            <option value="herringbone">Herringbone twill</option>
+            <option value="yabane">Arrow fletching (yabane)</option>
+            <option value="basketweave">Basketweave</option>
+            <option value="meander">Greek key (meander)</option>
+            <option value="sunburst">Deco sunburst</option>
+            <option value="ogee">Gothic trellis (ogee)</option>
+            <option value="tatewaku">Rising steam (tatewaku)</option>
+            <option value="guilloche">Guilloché braid</option>
+            <option value="starcross">Star &amp; cross (khatam)</option>
+            <option value="seigaiha">Ocean waves (seigaiha)</option>
+            <option value="asanoha">Hemp leaf (asanoha)</option>
+            <option value="kagome">Woven bamboo (kagome)</option>
+            <option value="kikko">Tortoiseshell (kikko)</option>
+            <option value="shippo">Seven treasures (shippo)</option>
+            <option value="hitomezashi">Stitch grid (hitomezashi)</option>
+            <option value="dunes">Flowing dunes</option>
+            <option value="mana">Mana monogram</option>
+          </select>
+        </label>
+        <label class="sel" id="laSideLayoutRow"
+          >Pattern layout
+          <select id="laSideLayout">
+            <option value="framed">Framed (border pinstripe)</option>
+            <option value="full">Full bleed (borderless)</option>
+          </select>
         </label>
         <div id="laStatus" class="sub"></div>
       </details>
@@ -364,8 +404,12 @@
         each inner side layer to its outer layer (the lamination hides the lid grooves), assemble,
         and the lid slides dry — never glue it to the box. The lid frame glues onto the lid only:
         slide the lid in first and centre the frame in its recess (front edges flush) so the recess
-        jigs it. The preview and the cut paths come from the same outlines, so the box matches what
-        you see.
+        jigs it — a solid-faced frame's pull hole then lines up with the lid's by itself. With side
+        engraving on, assemble every engraved face outward — the parts are drawn so all engraving
+        runs face-up on the sheet, and two of them turn over to get there: the back wall (its blank
+        is symmetric, so it just flips) and the left outer layer (cut mirrored, and its combs only
+        fit the flipped way, so the part self-jigs). The preview and the cut paths come from the
+        same outlines, so the box matches what you see.
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

@@ -27,11 +27,25 @@ import {
   type LidArtElement,
   type LidArtPass,
   layoutLidArt,
+  type LidFinish,
+  marquePanel,
   type PassMode,
   sanitizeLidArt,
+  type SideLayout,
+  type SideStyle,
   sortPips,
 } from "./lidart.ts";
-import { type Panel, panels, placeMatrix } from "./panels.ts";
+import { flattenPathData, ringsArea } from "./heal.ts";
+import {
+  capSpec,
+  type Panel,
+  panels,
+  placeMatrix,
+  type Pt,
+  pullHole,
+  thumbNotch,
+} from "./panels.ts";
+import { layoutSideArt, type WallArt } from "./sideart.ts";
 import {
   capacity,
   DECK_PRESETS,
@@ -43,7 +57,7 @@ import {
   SLEEVE_PRESETS,
 } from "./params.ts";
 import { autocompleteCards, fetchSymbolPaths, lookupCard } from "./scryfall.ts";
-import { filenameStem, layout, type LidArtSheet, sheetSvg, totalPanelArea } from "./svg.ts";
+import { filenameStem, layout, type SheetArt, sheetSvg, totalPanelArea } from "./svg.ts";
 
 const store = createStore(schema, { key: "laser-mtg-deck-box:params", version: 2 });
 const params: Params = store.load();
@@ -79,11 +93,20 @@ let font: opentype.Font | null = null;
 // lookup refreshes/persists them (persisted paths win, so a stored blob round-trips unchanged).
 const BUNDLED_SYMBOLS = manaSymbols as Record<string, string>;
 
-// One vector source: the same element list feeds the SVG export and the 3D preview overlay.
+// One vector source: the same element lists feed the SVG export and the 3D preview overlays.
+function artConfig(): LidArt {
+  return { ...art, symbolPaths: { ...BUNDLED_SYMBOLS, ...art.symbolPaths } };
+}
+
 function lidArtElements(): LidArtElement[] {
   if (!art.enabled) return [];
-  const cfg: LidArt = { ...art, symbolPaths: { ...BUNDLED_SYMBOLS, ...art.symbolPaths } };
-  return layoutLidArt(params, cfg, { font });
+  return layoutLidArt(params, artConfig(), { font });
+}
+
+// The wall engravings — gated on the side style alone, so sides can be decorated with the lid
+// marque off (and vice versa).
+function sideArtWalls(): WallArt[] {
+  return layoutSideArt(params, artConfig());
 }
 
 const viewer = createViewer(document.getElementById("app")!);
@@ -136,55 +159,62 @@ function panelMesh(panel: Panel, matrix: Matrix4, face: number, edge: number): M
   return mesh;
 }
 
-// --- lid marque preview overlay --------------------------------------------------------------
+// --- art preview overlays --------------------------------------------------------------------
 //
-// The marque is drawn once onto an offscreen canvas (Path2D over the SAME path-data strings the SVG
-// exports) and mapped onto a thin transparent plane a hair above the lid's top face, added as a
-// CHILD of the lid mesh so it follows the lid through closed/open/explode/flat views.
-const PREVIEW_TINT: Record<LidArtPass, string> = {
+// Each decorated panel's art is drawn once onto an offscreen canvas (Path2D over the SAME
+// path-data strings the SVG exports) and mapped onto a thin transparent plane a hair off the
+// panel's face, added as a CHILD of the panel mesh so it follows through closed/open/explode/flat
+// views. Foil previews gold; engrave previews char-brown — pass-keyed exactly like the export's
+// layer colours, so a foil single-mode marque (all elements foilGold) still previews all gold.
+// The pierced finish's cut elements are NOT painted: they become real holes in the frame mesh
+// (see pierceHoles in rebuild), so pierced looks nothing like engraved — you see through the
+// frame onto the lid below, exactly like the physical part.
+const PREVIEW_TINT: Record<Exclude<LidArtPass, "cut">, string> = {
   foilGold: "#d4a947",
   engrave: "#3a2a1a",
 };
 
-// Single-pass = one physical foil, so preview everything in the gold tint; multi = per-pass tints
-// (the coin glyphs sit on the dark-engrave layer inside their gold discs).
-function previewColor(pass: LidArtPass, mode: PassMode): string {
-  return mode === "single" ? PREVIEW_TINT.foilGold : PREVIEW_TINT[pass];
-}
-
 const PREVIEW_PPM = 12;
 
-function drawMarqueCanvas(
+function drawArtCanvas(
   canvas: HTMLCanvasElement,
   els: LidArtElement[],
-  mode: PassMode,
-  lidW: number,
-  lidL: number,
+  w: number,
+  h: number,
 ): void {
-  const W = Math.max(1, Math.round(lidW * PREVIEW_PPM));
-  const H = Math.max(1, Math.round(lidL * PREVIEW_PPM));
+  const W = Math.max(1, Math.round(w * PREVIEW_PPM));
+  const H = Math.max(1, Math.round(h * PREVIEW_PPM));
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.clearRect(0, 0, W, H);
 
-  // All-vector marque: Path2D consumes the very path-data strings the SVG exports, in lid-local mm
+  // All-vector art: Path2D consumes the very path-data strings the SVG exports, in panel-local mm
   // mapped y-up into the canvas. Element order = paint order (multi-mode coin glyphs over discs).
   ctx.setTransform(PREVIEW_PPM, 0, 0, -PREVIEW_PPM, 0, H);
   for (const el of els) {
     if (el.paths.length === 0) continue;
-    ctx.fillStyle = previewColor(el.pass, mode);
+    if (el.pass === "cut") continue; // a real hole in the mesh — paint would cover it
+    ctx.fillStyle = PREVIEW_TINT[el.pass];
     ctx.fill(new Path2D(el.paths.join("")), el.fillRule);
   }
 }
 
-// Build the overlay plane for the lid, in the lid's LOCAL frame (outline in x,y extruded +z to t).
-function addMarque(lidMesh: Mesh, els: LidArtElement[]): void {
+// One overlay plane in the panel's LOCAL frame (outline in x,y extruded +z to t). face "top" puts
+// it just above the w = t face in drawn orientation; "bottom" puts it under w = 0 and turns it to
+// face outward — the same 180° flip the physical part gets at assembly, which is also what makes
+// the drawn-identical canvas read correctly from that side.
+function addArtPlane(
+  mesh: Mesh,
+  els: LidArtElement[],
+  w: number,
+  h: number,
+  face: "top" | "bottom",
+): void {
   if (els.length === 0) return;
-  const d = dims(params);
   const canvas = document.createElement("canvas");
-  drawMarqueCanvas(canvas, els, art.passMode, d.lidW, d.lidL);
+  drawArtCanvas(canvas, els, w, h);
   const tex = new CanvasTexture(canvas);
   tex.colorSpace = SRGBColorSpace;
   tex.anisotropy = 4;
@@ -194,10 +224,15 @@ function addMarque(lidMesh: Mesh, els: LidArtElement[]): void {
     side: DoubleSide,
     depthWrite: false,
   });
-  const plane = new Mesh(new PlaneGeometry(d.lidW, d.lidL), mat);
-  plane.position.set(d.lidW / 2, d.lidL / 2, params.thickness + 0.06);
+  const plane = new Mesh(new PlaneGeometry(w, h), mat);
+  if (face === "top") {
+    plane.position.set(w / 2, h / 2, params.thickness + 0.06);
+  } else {
+    plane.position.set(w / 2, h / 2, -0.06);
+    plane.rotation.y = Math.PI;
+  }
   plane.matrixAutoUpdate = true;
-  lidMesh.add(plane);
+  mesh.add(plane);
 }
 
 function rebuild(): void {
@@ -219,10 +254,27 @@ function rebuild(): void {
   const tint = TINTS[materialFor(params.thickness).name] ?? TINTS["1/8″ basswood ply"]!;
   const lidFace = tint.face - 0x181818; // all tints keep every channel above 0x18, so this never wraps
   const artEls = lidArtElements();
+  const marqueOn = marquePanel(params); // the lid, or the frame when its face is solid
+  // The pierced marque's cut elements become REAL holes in the frame mesh, flattened from the
+  // very path data the export cuts (holes wind CW, so CCW rings flip). The engraved char and any
+  // foil stay on the painted overlay plane, which skips the cut pass.
+  const pierceHoles: Pt[][] = artEls
+    .filter((el) => el.pass === "cut")
+    .flatMap((el) => el.paths.flatMap((d2) => flattenPathData(d2, 0.1, undefined, 1, false)))
+    .map((r) => (ringsArea([r]) > 0 ? ([...r].reverse() as Pt[]) : (r as Pt[])));
+  const wallArt = new Map<string, WallArt>(sideArtWalls().map((wa) => [wa.panelId, wa]));
+  const flat = viewMode() === "flat";
 
   const addPanel = (panel: Panel, m: Matrix4): void => {
+    if (panel.id === marqueOn && pierceHoles.length > 0) {
+      panel = { ...panel, holes: [...panel.holes, ...pierceHoles] };
+    }
     const mesh = panelMesh(panel, m, panel.id === "lid" ? lidFace : tint.face, tint.edge);
-    if (panel.id === "lid") addMarque(mesh, artEls);
+    if (panel.id === marqueOn) addArtPlane(mesh, artEls, panel.size[0], panel.size[1], "top");
+    const wa = wallArt.get(panel.id);
+    // Flat view shows the sheet as engraved: every overlay rides the drawn top face there, which
+    // is exactly the face the laser marks.
+    if (wa) addArtPlane(mesh, wa.elements, wa.w, wa.h, flat ? "top" : wa.artFace);
     modelGroup.add(mesh);
   };
 
@@ -267,15 +319,20 @@ function updateReadout(): void {
   const mat = materialFor(params.thickness);
   const grams = Math.round(((totalPanelArea(params) * params.thickness) / 1000) * mat.density);
   const l = layout(params);
+  // The marque panel is pinned to sheet 1's bottom-left corner (see layout()), so the foil patch
+  // can go on the raw sheet before cutting: it must reach gap + panel size in from that corner.
+  // With the solid frame face that panel is the frame, not the lid. The non-foil finishes need no
+  // patch — the line disappears with them.
+  const onCap = marquePanel(params) === "lid-cap";
+  const patchW = Math.ceil(params.partGap + (onCap ? d.capW : d.lidW));
+  const patchL = Math.ceil(params.partGap + (onCap ? d.capL : d.lidL));
   dimsEl.innerHTML = [
     `Closed box: <b>${d.outerW.toFixed(1)} × ${d.outerD.toFixed(1)} × ${d.assembledH.toFixed(1)} mm</b>`,
     `Fits <b>${capacity(params)}</b> cards (deck ${params.cardCount} + ${params.extraCards} spare)`,
     `${mat.name} · ~${grams} g · <b>${l.sheets.length}</b> sheet${l.sheets.length === 1 ? "" : "s"} of ${params.sheetW}×${params.sheetH}`,
-    // The lid is pinned to sheet 1's bottom-left corner (see layout()), so the foil patch can go
-    // on the raw sheet before cutting: it must reach gap + lid size in from that corner.
-    ...(art.enabled
+    ...(art.enabled && art.finish === "foil"
       ? [
-          `Foil: cover the sheet's bottom-left corner ≥ <b>${Math.ceil(params.partGap + d.lidW)} × ${Math.ceil(params.partGap + d.lidL)} mm</b> (lid is pinned there)`,
+          `Foil: cover the sheet's bottom-left corner ≥ <b>${patchW} × ${patchL} mm</b> (${onCap ? "frame" : "lid"} is pinned there)`,
         ]
       : []),
   ].join("<br>");
@@ -288,6 +345,15 @@ function updateReadout(): void {
   }
   if (params.kerf === 0) {
     warnings.push("Kerf is 0 — joints will cut loose. Measure your laser's kerf (≈0.1–0.2 mm).");
+  }
+  // The window face always has its window as the pull; the solid face relies on the through pull
+  // hole and/or the thumb well — or a wall thumb notch, which exposes the lid's edge to grip.
+  // Only with all of them off (or degraded away) is there nothing to open the lid with.
+  const cap = capSpec(params);
+  if (cap && cap.window == null && !pullHole(params) && !cap.scallop && !thumbNotch(params)) {
+    warnings.push(
+      "Solid frame face with no pull hole, thumb well or wall notch — nothing can grip the lid to slide it open.",
+    );
   }
   warningsEl.style.display = warnings.length > 0 ? "" : "none";
   warningsEl.innerHTML = warnings.join("<br>");
@@ -314,7 +380,7 @@ const panel = renderPanel(document.getElementById("controls")!, schema, params, 
     },
     {
       id: "cap",
-      hint: "The frame is a ninth panel glued onto the sunken lid: a picture frame whose window recesses the marque behind a charred border and sits flush with the box top (the rail strips shrink to make room). The window wears a legendary crown arch at the back and cathedral cusps in the corners; a thumb in it catches the front edge — widened by the scallop — and drags the lid open. Frame too small for a window and it drops from the cut.",
+      hint: "The frame is a ninth panel glued onto the sunken lid, flush with the box top (the rail strips shrink to make room). Its face is a choice: the classic window — cut out with a legendary crown arch, cathedral cusps and the thumb scallop, recessing the marque behind a charred border, a thumb in it drags the lid open — or solid, an uncut face that carries the marque on top; the pull hole then drills through frame and lid together, the scallop becomes a thumb well behind the front edge (its flat front wall is the bar a thumb pulls against), and the pierced (fretwork) finish becomes available. A window-faced frame too small for its window drops from the cut.",
     },
     {
       id: "material",
@@ -329,6 +395,7 @@ const panel = renderPanel(document.getElementById("controls")!, schema, params, 
   presets: [DECK_PRESETS, SLEEVE_PRESETS, MATERIAL_PRESETS],
   onChange: () => {
     store.save(params);
+    syncFinishRows(); // the frame face gates the pierced finish option
     rebuild();
     updateReadout();
   },
@@ -384,23 +451,25 @@ document.getElementById("reset")!.addEventListener("click", () => {
   viewer.frameCamera([modelGroup]);
 });
 
-function currentArtSheet(): LidArtSheet | undefined {
-  return art.enabled ? { elements: lidArtElements(), mode: art.passMode } : undefined;
+function currentSheetArt(): SheetArt | undefined {
+  const marque = lidArtElements();
+  const walls = sideArtWalls();
+  return marque.length > 0 || walls.length > 0 ? { marque, walls } : undefined;
 }
 
 function exportSvgs(): string[] {
-  const artSheet = currentArtSheet();
-  return layout(params).sheets.map((sheet) => sheetSvg(sheet, params, artSheet));
+  const sheetArt = currentSheetArt();
+  return layout(params).sheets.map((sheet) => sheetSvg(sheet, params, sheetArt));
 }
 
 document.getElementById("downloadSvg")!.addEventListener("click", () => {
   const l = layout(params);
-  const artSheet = currentArtSheet();
+  const sheetArt = currentSheetArt();
   l.sheets.forEach((sheet, i) => {
     const suffix = l.sheets.length === 1 ? "" : `-sheet-${i + 1}`;
     downloadText(
       `${filenameStem(params)}${suffix}.svg`,
-      sheetSvg(sheet, params, artSheet),
+      sheetSvg(sheet, params, sheetArt),
       "image/svg+xml",
     );
   });
@@ -412,14 +481,42 @@ const laEnable = document.getElementById("laEnable") as HTMLInputElement;
 const laName = document.getElementById("laName") as HTMLInputElement;
 const laLookup = document.getElementById("laLookup") as HTMLButtonElement;
 const laSuggest = document.getElementById("laSuggest") as HTMLUListElement;
+const laFinish = document.getElementById("laFinish") as HTMLSelectElement;
 const laMode = document.getElementById("laMode") as HTMLSelectElement;
+const laModeRow = document.getElementById("laModeRow") as HTMLElement;
 const laUniform = document.getElementById("laUniform") as HTMLInputElement;
+const laSides = document.getElementById("laSides") as HTMLSelectElement;
+const laSideLayout = document.getElementById("laSideLayout") as HTMLSelectElement;
+const laSideLayoutRow = document.getElementById("laSideLayoutRow") as HTMLElement;
 const laStatus = document.getElementById("laStatus")!;
 
 laEnable.checked = art.enabled;
 laName.value = art.name;
+laFinish.value = art.finish;
 laMode.value = art.passMode;
 laUniform.checked = art.uniformPips;
+laSides.value = art.sides;
+laSideLayout.value = art.sideLayout;
+
+// The foil workflow only exists in the foil finish — the other marques are single-layer char (+
+// cuts). Inline display (not the hidden attribute): the row's .sel class sets display:grid, and
+// any author display rule beats the UA's [hidden] { display: none }.
+//
+// Pierced fretwork needs the solid frame face behind it (cutting the bare lid would open the card
+// cavity; the window face has no material where the marque sits), so the option greys out
+// elsewhere — a pierced config kept anyway simply engraves (layoutLidArt applies the same rule).
+const laPierced = laFinish.querySelector('option[value="pierced"]') as HTMLOptionElement;
+function syncFinishRows(): void {
+  laModeRow.style.display = art.finish === "foil" ? "" : "none";
+  laPierced.disabled = marquePanel(params) !== "lid-cap";
+}
+syncFinishRows();
+
+// The layout choice only means something once a pattern is chosen — same inline-display move.
+function syncSideRows(): void {
+  laSideLayoutRow.style.display = art.sides === "none" ? "none" : "";
+}
+syncSideRows();
 
 function setStatus(msg: string, err = false): void {
   laStatus.textContent = msg;
@@ -597,8 +694,26 @@ laName.addEventListener("keydown", (e) => {
 });
 laName.addEventListener("blur", () => closeSuggest());
 laLookup.addEventListener("click", () => void doLookup());
+laFinish.addEventListener("change", () => {
+  art.finish = laFinish.value as LidFinish;
+  syncFinishRows();
+  saveLidArt();
+  rebuild();
+  updateReadout(); // the foil-corner line only applies to the foil finish
+});
 laMode.addEventListener("change", () => {
   art.passMode = laMode.value as PassMode;
+  saveLidArt();
+  rebuild();
+});
+laSides.addEventListener("change", () => {
+  art.sides = laSides.value as SideStyle;
+  syncSideRows();
+  saveLidArt();
+  rebuild();
+});
+laSideLayout.addEventListener("change", () => {
+  art.sideLayout = laSideLayout.value as SideLayout;
   saveLidArt();
   rebuild();
 });
@@ -632,6 +747,7 @@ installAppHook({
   canvas: viewer.renderer.domElement,
   art,
   elements: lidArtElements,
+  walls: sideArtWalls,
   exportSvgs,
   lookup: (name: string) => {
     laName.value = name;
