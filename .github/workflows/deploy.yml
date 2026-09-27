@@ -52,7 +52,7 @@ jobs:
         with:
           # No root package.json here (two sibling checkouts), so action-setup
           # can't read a packageManager field — pin the version both repos use.
-          version: 11.11.0
+          version: 12.6.0
       - uses: actions/setup-node@v7
         with:
           node-version-file: app/.node-version

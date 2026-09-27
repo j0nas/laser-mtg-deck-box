@@ -7,6 +7,9 @@ export default defineConfig({
   // Relative base so the built bundle works from any path — standalone at "/" and embedded under a
   // subdirectory. The dev server ignores a relative base and still serves at "/".
   base: "./",
+  // The linked kit resolves `three` from its own node_modules; without dedupe the bundle ships a
+  // second three.js (THREE "multiple instances" warning, broken instanceof across the boundary).
+  resolve: { dedupe: ["three"] },
   fmt: {},
   lint: {
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
